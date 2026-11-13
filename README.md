@@ -2,7 +2,11 @@
 
 **Your desktop's memory as a causal graph, not a video. Zero screenshots on disk.**
 
-screengraph-os watches your windows the way a debugger watches memory. It splits the desktop into per-window viewports and drops idle frames in about 0.09 ms with a 2D-DCT perceptual gate. Each frame is reduced to int8 + 1-bit patch embeddings and scrubbed accessibility text, then the pixel buffer is `memset(0)` before anything touches disk. Every semantic change becomes a node in a **Hawkes-process cross-app causal graph**. That lets you ask:
+![ScreenGraph-OS Terminal Demo](assets/demo.svg)
+
+<sub>Real engine output on the deterministic simulator (seed 7). The footer storage figures come from <code>evals/latest_report.json</code>; the "legacy" figure is a parametric model of 0.5 fps video, not a measured product. Regenerate with <code>python scripts/generate_demo_asset.py</code>.</sub>
+
+screengraph-os watches your windows the way a debugger watches memory. It splits the desktop into per-window viewports and drops idle frames in about 0.1 ms (p50) with a 2D-DCT perceptual gate. Each frame is reduced to int8 + 1-bit patch embeddings and scrubbed accessibility text, then the pixel buffer is `memset(0)` before anything touches disk. Every semantic change becomes a node in a **Hawkes-process cross-app causal graph**. That lets you ask:
 
 > *"Why did I change `db_pool.py`?"*
 > → `pytest` raised `SQLiteBusyException` in the terminal → you copied it → searched it → opened the SQLite `busy_timeout` docs → edited `db_pool.py`.
