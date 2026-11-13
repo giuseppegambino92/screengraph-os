@@ -104,8 +104,29 @@ class _Writer:
                     self._put(r * self.cols + c, words, min(1.0, cover * 1.5))
 
 
+def _fwhm(r: np.ndarray, pk: int, level: float) -> float:
+    """Width of the contiguous run around pk above `level`, as a fraction of the series length."""
+    half = r > level
+    a_ = pk
+    while a_ > 0 and half[a_ - 1]:
+        a_ -= 1
+    b_ = pk
+    while b_ < r.size - 1 and half[b_ + 1]:
+        b_ += 1
+    return (b_ - a_ + 1) / r.size
+
+
 def _excursion(m: np.ndarray) -> Optional[dict]:
-    """Vertical-excursion test on a thin curve mask (rows x cols of its bbox)."""
+    """Vertical-excursion test on a thin curve mask (rows x cols of its bbox).
+
+    Two robust tests on the curve's upper envelope h (column tops):
+      global: z = (max h - med h) / (1.4826 MAD(h) + eps) >= 6 (or >= 3 while towering >= 25 % of the
+              height over every column outside the peak's neighbourhood), FWHM <= 8 %, steep rise;
+      local:  on jagged/volatile series the MAD above is inflated by slow drift, so detrend first:
+              r = h - runmed_{20 % width}(h), z_loc = max r / (1.4826 MAD(r) + eps) >= 7, residual
+              prominence >= 20 % of the height, FWHM(r) <= 8 %, and the peak must be unique (no other
+              residual peak outside +-4 % of the width reaches 60 % of it).
+    A false spike sets the causal anomaly flag, so both cut-offs are chosen for zero false positives."""
     bh, bw = m.shape
     cov = m.any(0)
     top = np.argmax(m, axis=0)
@@ -116,28 +137,34 @@ def _excursion(m: np.ndarray) -> Optional[dict]:
     pk = int(np.argmax(heights))
     peak = float(heights[pk])
     prom = peak - med
-    if prom < max(3.0, 0.2 * bh):
-        return None
-    z = prom / (1.4826 * mad + max(1.0, 0.02 * bh))
-    # full width at half prominence of THIS peak: the contiguous run around pk above med + prom/2
-    half = heights > med + 0.5 * prom
-    a_ = pk
-    while a_ > 0 and half[a_ - 1]:
-        a_ -= 1
-    b_ = pk
-    while b_ < bw - 1 and half[b_ + 1]:
-        b_ += 1
-    narrow = (b_ - a_ + 1) / bw
+    eps = max(1.0, 0.02 * bh)
     k = max(3, int(round(0.04 * bw)))
+    if prom >= max(3.0, 0.2 * bh):
+        z = prom / (1.4826 * mad + eps)
+        narrow = _fwhm(heights, pk, med + 0.5 * prom)
+        lo, hi = max(0, pk - k), min(bw, pk + k + 1)
+        steep = (peak - float(heights[lo:hi][cov[lo:hi]].min())) / prom
+        rest = np.concatenate([heights[:lo], heights[hi:]])
+        towers = rest.size > 0 and (peak - float(rest.max())) >= 0.25 * bh
+        if narrow <= 0.08 and steep >= 0.6 and (z >= 6.0 or (z >= 3.0 and towers)):
+            return {"x": pk, "y_peak": int(top[pk]), "y_base": int(bh - med), "z": round(z, 2), "test": "global",
+                    "prominence": round(prom / bh, 3), "energy": round(min(1.0, z / 12.0), 3)}
+    # local robust z-score of the detrended envelope
+    win = max(9, int(0.2 * bw)) | 1
+    base = ndimage.median_filter(heights, size=win, mode="nearest")
+    r = heights - base
+    pk = int(np.argmax(r))
+    rp = float(r[pk])
+    if rp < max(3.0, 0.2 * bh):
+        return None
+    rmad = float(np.median(np.abs(r - np.median(r))))
+    zl = rp / (1.4826 * rmad + eps)
     lo, hi = max(0, pk - k), min(bw, pk + k + 1)
-    local_rise = peak - float(heights[lo:hi][cov[lo:hi]].min())
-    steep = local_rise / prom
-    # volatile series: the peak must also tower over everything outside its own neighbourhood
-    rest = np.concatenate([heights[:lo], heights[hi:]])
-    towers = rest.size > 0 and (peak - float(rest.max())) >= 0.25 * bh
-    if narrow <= 0.08 and steep >= 0.6 and (z >= 6.0 or (z >= 3.0 and towers)):
-        return {"x": pk, "y_peak": int(top[pk]), "y_base": int(bh - med), "z": round(z, 2),
-                "prominence": round(prom / bh, 3), "energy": round(min(1.0, z / 12.0), 3)}
+    rest = np.concatenate([r[:lo], r[hi:]])
+    unique = rest.size == 0 or float(rest.max()) <= 0.6 * rp
+    if zl >= 7.0 and unique and _fwhm(r, pk, 0.5 * rp) <= 0.08:
+        return {"x": pk, "y_peak": int(top[pk]), "y_base": int(bh - base[pk]), "z": round(zl, 2), "test": "local",
+                "prominence": round(rp / bh, 3), "energy": round(min(1.0, zl / 12.0), 3)}
     return None
 
 
@@ -302,8 +329,12 @@ def detect_morphology(pixels: np.ndarray, colors: np.ndarray, rows: int, cols: i
         if _pill_shape(c, h, w, win_area) and 0.03 <= c["holes"] <= 0.5:
             pills.append(c)
     in_diagram = _node_edge(pixels, boxes, wr, objects, h, w, buf)
-    for c in pills:  # a labelled box wired into a diagram is a node, not a badge
-        if c["lab"] in in_diagram:
+    compact = [c for c in comps if c["lab"] not in used and not c["touches"] and c["fill"] >= 0.6
+               and c["area"] <= 0.03 * win_area]
+    for c in pills:
+        if c["lab"] in in_diagram:  # a labelled box wired into a diagram is a node, not a badge
+            continue
+        if _lattice_siblings(c, compact) > 2:  # one cell of a grid of identical cards/tiles, not a badge
             continue
         sl = c["sl"]
         objects.append({"type": "badge", "color": c["color"], "bbox": _bb(sl)})
@@ -321,6 +352,23 @@ def detect_morphology(pixels: np.ndarray, colors: np.ndarray, rows: int, cols: i
     chrom.fill(False)
     labels.fill(0)
     return wr.W, objects
+
+
+def _lattice_siblings(c: dict, compact: list) -> int:
+    """Other compact components of the same size (+-10 % width and height) aligned with c on a row
+    (same top) or a column (same left edge or centre)."""
+    sl = c["sl"]
+    top, left, cx = sl[0].start, sl[1].start, (sl[1].start + sl[1].stop) / 2
+    tw, th = max(1.0, 0.1 * c["bw"]), max(1.0, 0.1 * c["bh"])
+    n = 0
+    for o in compact:
+        if o["lab"] == c["lab"] or abs(o["bw"] - c["bw"]) > tw or abs(o["bh"] - c["bh"]) > th:
+            continue
+        os_ = o["sl"]
+        same_row = abs(os_[0].start - top) <= max(1.0, 0.25 * c["bh"])
+        same_col = abs(os_[1].start - left) <= tw or abs((os_[1].start + os_[1].stop) / 2 - cx) <= tw
+        n += same_row or same_col
+    return n
 
 
 def _pill_shape(c: dict, h: int, w: int, win_area: float) -> bool:

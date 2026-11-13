@@ -392,6 +392,9 @@ def scale_eval(n_target: int, base: Path, seed: int) -> dict:
     return out
 
 
+HELDOUT_TEST_SEED = 20261113
+
+
 def ablation(base: Path, seed: int, name: str, note: str, **overrides) -> dict:
     """Same session with one encoder switch flipped."""
     sg = ScreenGraph(Config.ephemeral(base / f"ablation_{name}", **overrides))
@@ -516,12 +519,17 @@ def main(argv=None) -> dict:
             report["ablation_ui_concepts"] = ablation_ui_concepts(base, args.seed)
             report["ablation_morphology_off"] = ablation_morphology_off(base, args.seed)
         if args.heldout:
-            from evals.morph_heldout import run as heldout_run
+            from evals.morph_heldout import gate_probe, run as heldout_run
 
-            report["morph_heldout_test_split"] = heldout_run(args.heldout, seed=98765)
+            report["morph_heldout_test_split"] = heldout_run(args.heldout, seed=HELDOUT_TEST_SEED)
             report["morph_heldout_test_split"]["note"] = (
-                "independent renderer; seed 98765 was evaluated once after the detectors were frozen "
-                "(seed 1234 was the development split)")
+                f"independent renderer; seed {HELDOUT_TEST_SEED} was first evaluated once after the Phase-3b "
+                "detectors were frozen (seed 1234 = development split)")
+            report["morph_heldout_previous_split"] = heldout_run(args.heldout, seed=98765)
+            report["morph_heldout_previous_split"]["note"] = (
+                "Phase-3 test split; its aggregate results were SEEN before the Phase-3b changes, so it is "
+                "no longer a clean test")
+            report["gate_heldout_probe"] = gate_probe(2 * args.heldout, seed=HELDOUT_TEST_SEED)
         report["gate_spike_only_probe"] = gate_spike_only_probe()
         if args.live:
             from screengraph.capture.live import run_live_capture
@@ -590,7 +598,12 @@ def print_report(r: dict) -> None:
             f"{k} R {v['recall']:.0%}/FPR {v['false_positive_rate']:.1%}" for k, v in pc.items()))
     if "gate_spike_only_probe" in r:
         gp = r["gate_spike_only_probe"]
-        con.print(f"gate pass rate for spike-only redraws: {gp['passed_gate']}/{gp['spike_only_frames']}")
+        con.print(f"gate pass rate for spike-only redraws (simulator): {gp['passed_gate']}/{gp['spike_only_frames']}")
+    if "gate_heldout_probe" in r:
+        gh = r["gate_heldout_probe"]
+        con.print(f"gate on held-out renderer: spike-only pass {gh['spike_only_pass_rate']:.1%}, cursor/caret false "
+                  f"pass {gh['cursor_caret_false_pass_rate']:.1%} ({gh['cursor_caret_false_passes_via_excursion_stage']} "
+                  f"via the excursion stage)")
     if "live_capture" in r:
         lv = r["live_capture"]
         con.print(f"live capture: {lv.get('status')} ticks={lv.get('ticks')} frames={lv.get('frames_seen')} "

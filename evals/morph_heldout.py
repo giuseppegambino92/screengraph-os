@@ -77,14 +77,14 @@ class Scene:
                     self.px[max(0, a):min(self.h, b + 1), x + t] = col
             prev = y
 
-    def finish(self, blur: bool, noise: float, scale: int) -> np.ndarray:
+    def finish(self, blur: bool, noise: float, scale: int, noise_rng=None) -> np.ndarray:
         px = self.px
         if blur:
             px = ndimage.uniform_filter(px, size=(2, 2, 1))
         if scale > 1:
             px = np.repeat(np.repeat(px, scale, 0), scale, 1)
         if noise > 0:
-            px = px + self.rng.normal(0, noise, px.shape)
+            px = px + (noise_rng or self.rng).normal(0, noise, px.shape)
         return np.clip(px, 0, 255).astype(np.uint8)
 
 
@@ -249,9 +249,91 @@ def run(n: int = 60, seed: int = 1234) -> dict:
     return {"n_per_case": n, "seed": seed, "per_concept": out, "detections_by_case": dict(tally["_cases"])}
 
 
+def _series_pair(sc: Scene) -> tuple[np.ndarray, np.ndarray]:
+    """The same calm or volatile series drawn twice: without and with a narrow spike."""
+    r = sc.rng
+    aw, ah = int(sc.w * r.uniform(0.35, 0.85)), int(sc.h * r.uniform(0.2, 0.45))
+    x0, y0 = int(r.integers(2, sc.w - aw - 2)), int(r.integers(8, sc.h - ah - 4))
+    walk = np.cumsum(r.normal(0, 0.03 if r.random() < 0.5 else 0.012, aw))
+    vals = np.clip(0.4 + walk - walk.mean(), 0.1, 0.65)
+    col, thick = _hue_rgb(r), int(r.integers(1, 3))
+    base = sc.px.copy()
+    out = []
+    for spike in (False, True):
+        sc.px[:] = base
+        v = vals.copy()
+        if spike:
+            sx = int(r.integers(int(0.1 * aw), int(0.9 * aw)))
+            wid = max(1, int(aw * r.uniform(0.005, 0.025)))
+            lo, hi = max(0, sx - wid), min(aw, sx + wid + 1)
+            v[lo:hi] = np.maximum(v[lo:hi], np.interp(np.arange(lo, hi), [lo, sx, hi - 1],
+                                                      [v[lo], r.uniform(0.85, 0.98), v[hi - 1]]))
+        sc.stroke(np.arange(x0, x0 + aw), y0 + ah - 1 - (v * (ah - 2)).astype(int), col, thick)
+        out.append(sc.px.copy())
+    return out[0], out[1]
+
+
+def _cursor(px: np.ndarray, y: int, x: int, s: int) -> None:
+    px[y:y + 3 * s, x:x + 2 * s] = 255
+    px[y + 3 * s:y + 4 * s, x:x + s] = 0
+
+
+def gate_probe(n: int = 120, seed: int = 4321) -> dict:
+    """Perceptual gate on the independent renderer: (a) spike-only redraws must PASS, (b) cursor moves and
+    caret blinks on an otherwise identical frame must be DROPPED. Noise is a static texture of the scene
+    (the same field in every frame of a pair): screen captures are digital, an unchanged window redraws
+    byte-identically. (With independent per-frame sensor noise the gate's dHash passes nearly every frame.)"""
+    from screengraph.capture.phash import PerceptualGate, ax_tree_hash
+
+    rng = np.random.default_rng(seed)
+    t = defaultdict(int)
+    for i in range(n):
+        scale = 2 if i % 2 else 1
+        blur, noise = bool(rng.random() < 0.5), float(rng.choice([0.0, 2.0, 4.0]))
+        sc = Scene(rng)
+        sc.distractor_text()
+        a, b = _series_pair(sc)
+
+        nseed = int(rng.integers(1 << 31))
+
+        def fin(px):
+            sc.px = px.astype(np.float32)
+            return sc.finish(blur, noise, scale, noise_rng=np.random.default_rng(nseed))
+
+        g = PerceptualGate(4, 6, quadrant_threshold=2)
+        g.check("w", "ax", fin(a))
+        d = g.check("w", "ax", fin(b))
+        t["spike_n"] += 1
+        t["spike_pass"] += d.passed
+        t["spike_pass_by_excursion_stage"] += d.reason == "visual_excursion"
+        # cursor / caret noise on the calm frame
+        base = fin(a)
+        g = PerceptualGate(4, 6, quadrant_threshold=2)
+        g.check("w", "ax", base)
+        H, W = base.shape[:2]
+        for _ in range(3):
+            f = fin(a)
+            if rng.random() < 0.7:
+                _cursor(f, int(rng.integers(0, H - 5 * scale)), int(rng.integers(0, W - 3 * scale)), scale)
+            else:  # caret blink: 1 px wide, one text line tall
+                y, x = int(rng.integers(0, H - 4 * scale)), int(rng.integers(0, W - 2))
+                f[y:y + 3 * scale, x:x + scale] = 230
+            d = g.check("w", "ax", f)
+            t["cursor_n"] += 1
+            t["cursor_false_pass"] += d.passed
+            t["cursor_false_pass_by_excursion_stage"] += d.reason == "visual_excursion"
+    return {"pairs": n, "seed": seed,
+            "spike_only_pass_rate": round(t["spike_pass"] / t["spike_n"], 3),
+            "spike_passes_via_excursion_stage": t["spike_pass_by_excursion_stage"],
+            "cursor_caret_frames": t["cursor_n"],
+            "cursor_caret_false_pass_rate": round(t["cursor_false_pass"] / t["cursor_n"], 3),
+            "cursor_caret_false_passes_via_excursion_stage": t["cursor_false_pass_by_excursion_stage"]}
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=60)
     ap.add_argument("--seed", type=int, default=1234)
+    ap.add_argument("--gate", action="store_true", help="run the perceptual-gate probe instead")
     a = ap.parse_args()
-    print(json.dumps(run(a.n, a.seed), indent=1))
+    print(json.dumps(gate_probe(2 * a.n, a.seed) if a.gate else run(a.n, a.seed), indent=1))

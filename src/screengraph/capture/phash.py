@@ -167,7 +167,35 @@ def _signature_bases(size: int) -> tuple[np.ndarray, np.ndarray]:
     return left, right
 
 
-def perceptual_signature(pixels: np.ndarray, size: int = 32) -> tuple[tuple[int, int], int, tuple[tuple[int, int], ...]]:
+EDGE_TAU = 24.0  # luma step (0..255) that counts as a strong vertical edge in the 64x64 grid
+EXCURSION_ROWS = 5  # a column's strong-edge extent must change by >= 5/64 of the window height in one tile
+
+
+def _edge_extent(g2: np.ndarray) -> np.ndarray:
+    """Tile fingerprint for thin vertical excursions: for each of 7 overlapping horizontal bands (16 rows,
+    stride 8) and each column, the NUMBER of rows holding a strong horizontal luma step (a vertical
+    stroke). (7, 63) uint8.
+    It is a per-column count, not an image: it cannot be inverted to pixels."""
+    ex = np.abs(g2[:, 1:] - g2[:, :-1]) > EDGE_TAU
+    n = g2.shape[0] // 4
+    c = np.cumsum(ex, axis=0, dtype=np.int16)
+    c = np.vstack([np.zeros((1, c.shape[1]), np.int16), c])
+    # 7 overlapping bands (16 rows, stride 8): a vertical run of >= 8 rows always lies inside one band
+    starts = np.arange(0, g2.shape[0] - n + 1, n // 2)
+    out = (c[starts + n] - c[starts]).astype(np.uint8)
+    ex.fill(False)
+    c.fill(0)
+    return out
+
+
+def excursion_delta(a: Optional[np.ndarray], b: Optional[np.ndarray]) -> int:
+    """Max over tiles (7 overlapping bands x 63 columns) of the change in strong-edge extent, in grid rows."""
+    if a is None or b is None or a.shape != b.shape:
+        return 0
+    return int(np.abs(a.astype(np.int16) - b.astype(np.int16)).max())
+
+
+def perceptual_signature(pixels: np.ndarray, size: int = 32, with_extent: bool = False):
     """((global pHash, mask), dHash, 2x2 quadrant (pHash, mask)) from one shared 2*size area-downsample.
 
     Quadrant hashes make Stage B sensitive to *localized* visual changes (a narrow
@@ -195,9 +223,11 @@ def perceptual_signature(pixels: np.ndarray, size: int = 32) -> tuple[tuple[int,
     mk = [int.from_bytes(bits[i, 8:].tobytes(), "big") for i in range(5)]
     d8 = z[24:32, 24:33]
     dh = _pack_bits((d8[:, 1:] > d8[:, :-1]).ravel())
+    ext = _edge_extent(g2) if with_extent else None
     g2.fill(0)
     z.fill(0)
-    return (h[0], mk[0]), dh, ((h[1], mk[1]), (h[2], mk[2]), (h[3], mk[3]), (h[4], mk[4]))
+    sig = (h[0], mk[0]), dh, ((h[1], mk[1]), (h[2], mk[2]), (h[3], mk[3]), (h[4], mk[4]))
+    return (*sig, ext) if with_extent else sig
 
 
 def masked_hamming(a: tuple[int, int], b: tuple[int, int]) -> int:
@@ -214,6 +244,7 @@ class GateDecision:
     phash_distance: int = -1
     dhash_distance: int = -1
     quadrant_distance: int = -1
+    excursion_rows: int = -1
     elapsed_ms: float = 0.0
 
 
@@ -246,9 +277,9 @@ class PerceptualGate:
         t0 = time.perf_counter()
         prev = self._state.get(window_id)
         if pixels is not None:
-            ph, dh, q = perceptual_signature(pixels, self.size)
+            ph, dh, q, ext = perceptual_signature(pixels, self.size, with_extent=True)
         else:
-            ph, dh, q = (0, 0), 0, ((0, 0),) * 4
+            ph, dh, q, ext = (0, 0), 0, ((0, 0),) * 4, None
         if prev is None:
             dec = GateDecision(True, "first_frame", ph[0], dh)
         elif prev[0] != ax_hash:
@@ -258,12 +289,19 @@ class PerceptualGate:
         else:
             dp, dd = masked_hamming(prev[1], ph), hamming64(prev[2], dh)
             dq = max(masked_hamming(a, b) for a, b in zip(prev[3], q))
+            # thin vertical excursions (a 1-3 px chart spike) barely move low-frequency DCT hashes; a
+            # column whose strong-edge extent changes by >= EXCURSION_ROWS rows in one tile is a change.
+            # Cursors/carets span <= 3 rows of the 64-row grid.
+            de = excursion_delta(prev[4], ext)
             if dp <= self.phash_threshold and dd <= self.dhash_threshold and dq <= self.quadrant_threshold:
-                dec = GateDecision(False, "idle_perceptual_match", ph[0], dh, dp, dd, dq)
+                if de >= EXCURSION_ROWS:
+                    dec = GateDecision(True, "visual_excursion", ph[0], dh, dp, dd, dq, de)
+                else:
+                    dec = GateDecision(False, "idle_perceptual_match", ph[0], dh, dp, dd, dq, de)
             else:
-                dec = GateDecision(True, "visual_change", ph[0], dh, dp, dd, dq)
+                dec = GateDecision(True, "visual_change", ph[0], dh, dp, dd, dq, de)
         if dec.passed:
-            self._state[window_id] = (ax_hash, ph, dh, q)
+            self._state[window_id] = (ax_hash, ph, dh, q, ext)
             self.passed += 1
         else:
             self.dropped += 1
