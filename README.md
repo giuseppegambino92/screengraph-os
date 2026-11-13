@@ -23,7 +23,7 @@ why db_pool.py?  (0.6 ms)
 
 > **Read this before the numbers.**
 > - **Accuracy numbers come from a deterministic synthetic workspace simulator** that ships with the repo and was developed alongside the engine. They show the pipeline is correct end to end; they are not evidence of accuracy on real desktops.
-> - **The default visual encoder is generic but training-free.** It uses spectral DCT, HOG and colour descriptors fused by a random projection. It is not grounded in words: text queries match **colour terms** and **on-screen text**, not concepts like "spike" or "tree diagram". An *optional* layer of hand-written UI-object detectors exists as a clearly labelled ablation; it was tuned together with the simulator.
+> - **The default visual encoder is training-free.** Spectral DCT, HOG and colour descriptors give a generic patch signature (used for query-by-example). Words reach pixels through two hand-designed, size-relative layers: basic **colour terms**, and a **morphological concept bank**. The bank maps seven image primitives (thin curve, vertical excursion, aligned bars, node-edge topology, labelled pill, floating overlay, row periodicity) to fixed words ("spike", "tree", "badge", ...). It contains no simulator coordinates or colours, but it was **designed knowing which six artifact types the simulator draws**, so 6/6 on the simulator is in-distribution. The evidence that it generalizes is the [held-out renderer test](#3b-held-out-generalization-of-the-morphological-concept-bank): 62–98 % recall per concept, with weak spots documented there.
 > - **The live macOS capture was verified on one Mac** (Screen Recording granted, Accessibility not granted). Real-desktop retrieval *quality* has not been measured: there is no labelled real-world dataset yet.
 > - **The "legacy" storage figure is a parametric model**, not a measurement of any product.
 
@@ -31,7 +31,7 @@ why db_pool.py?  (0.6 ms)
 
 ## Results
 
-Measured by `python -m evals.benchmark_suite --live 5` on an Apple-silicon Mac (macOS 27.2, arm64, 14 cores, Python 3.11.18, NumPy 2.4.6, SQLite 3.53.1). Raw output is in [`evals/latest_report.json`](evals/latest_report.json). The full run takes about 40 s, including a 10,000-event scale run, a 10-seed sweep, the UI-concepts ablation and a 5-tick live capture. **Latencies were measured while other applications kept the machine's load average around 20 (14 cores).** In a quieter run made just before the final change, which only adds buffer wipes inside the encoder and leaves the gate untouched, they were about 15–30 % lower (gate p99 0.159 ms). Accuracy and storage numbers are deterministic and unaffected.
+Measured by `python -m evals.benchmark_suite --live 5` on an Apple-silicon Mac (macOS 27.2, arm64, 14 cores, Python 3.11.18, NumPy 2.4.6, SQLite 3.53.1). Raw output is in [`evals/latest_report.json`](evals/latest_report.json). The full run takes about 61 s. It includes a 10,000-event scale run, a 10-seed sweep, two encoder ablations, a held-out morphology test (840 scenes) and a 5-tick live capture. **Load average during the run was 6.2–8.7 on 14 cores**, from other applications (an Android build and an iOS simulator); the report records it at start and end. Accuracy and storage numbers are deterministic and unaffected by load.
 
 **Synthetic workload:** a scripted 60-minute session on a 5120×1440 ultra-wide plus a 2560×1440 monitor. Five windows (iTerm2, Chrome, VS Code, Grafana, Slack) produce 450 window ticks: 377 idle or cursor/caret-only and 73 semantic changes. The session contains 4 multi-hop debugging chains, 6 visual artifacts, 15 injected secrets, and hard negatives such as a chat message naming the file about to be edited.
 
@@ -40,51 +40,88 @@ Measured by `python -m evals.benchmark_suite --live 5` on an Apple-silicon Mac (
 | Metric | screengraph-os | Note |
 |---|---|---|
 | Frames dropped by the pHash + AX gate | **82.9 %** (373 / 450) | 98.9 % of idle ticks; 4 cursor-noise false passes |
-| Semantic changes missed | **0** / 73 | includes a canvas-only chart spike (caught by the quadrant hashes) |
-| Gate latency, dropped frames (p50 / p95 / p99) | **0.090 / 0.136 / 0.194 ms** | budget < 0.20 ms ✅; the p99 *stretch* target of 0.15 ms is **not** met (0.159 ms in a quiet run) |
+| Semantic changes missed | **0** / 73 | includes the C4 dashboard refresh that draws the canvas-only spike (see §2 for spike-only redraws) |
+| Gate latency, dropped frames (p50 / p95 / p99) | **0.089 / 0.133 / 0.193 ms** | budget < 0.20 ms ✅; the p99 target of < 0.16 ms is **not** met under this load (0.159 ms in an earlier quiet run) |
 | Storage growth per stored event | 4.1 KB | int8 patches 2,048 B + int8 global 256 B + 1-bit codes 160 B + text/FTS/edges |
-| **Projected 30 days × 8 h** | **76.8 MB** (10 seeds: 76.8–86.7 MB, mean 81.7) | target < 95 MB ✅ |
+| **Projected 30 days × 8 h** | **76.8 MB** (10 seeds: 76.8–86.7 MB, mean 82.5) | target < 95 MB ✅ |
 | Same, Phase 1 formula | 112.1 MB | see the note below |
 | Image files / pixel-sized blobs on disk | **0 / 0** (max blob 2,048 B) | |
-| RAM buffers non-zero after ingest | **0** / 450 frames; 758 buffers (102 MB) zeroed, 0 verification failures | |
+| RAM buffers non-zero after ingest | **0** / 450 frames; 912 buffers (115 MB) zeroed, 0 verification failures | |
 
 *Projection method.* Phase 1 multiplied the **whole** database file, including its fixed empty-schema pages (147 KB), by 240 hours. The current formula counts the schema once and projects only the per-hour growth. The old-formula figure is reported alongside, so you can see how much of the improvement comes from the method change and how much from the engineering:
 - int8 scalar quantization: about 1.4 KB/event saved
 - 8 KB SQLite pages: a 2.6 KB vector row wasted 37 % of a 4 KB page
-- sparse concept JSON
+- sparse, packed concept labels (`"red=.83 chart line"`). The morphology words first pushed two seeds from 86.7 to 88.6 MB, and packing brought them back.
 
 ### 2. Causal root-cause tracing ("why did I edit this file?")
 
 | Method | Root-cause Recall@1 | Chain precision / recall / F1 |
 |---|---|---|
-| **screengraph-os** (default generic encoder) | **75 %** (3/4) | **1.000** / 0.958 / 0.977 |
-| screengraph-os + optional UI-concept ablation | 100 % (4/4) | 1.000 / 1.000 / 1.000 |
+| **screengraph-os** (default encoder, morphological concept bank) | **100 %** (4/4) | **1.000 / 1.000 / 1.000** |
+| ablation: `morphology=False` (the Phase-2 encoder) | 75 % (3/4) | 1.000 / 0.958 / 0.977 |
+| ablation: simulator-tuned `ui_concepts=True` | 100 % (4/4) | 1.000 / 1.000 / 1.000 |
 | Flat timestamp ("what happened right before?") | 0 % | F1 0.683 |
 | Flat hybrid retrieval (BM25 + dense, no graph) | 75 % | F1 0.475 |
 
-Chain precision is **1.000 on all 10 sweep seeds**. Chat messages that merely mention a file, without error text, a clipboard transfer or a followed link, no longer enter the chain. That is the *mention-only discount*.
+Root recall, chain precision and chain recall are **1.000 on all 10 sweep seeds**. Chat messages that merely mention a file, without error text, a clipboard transfer or a followed link, do not enter the chain. That is the *mention-only discount*.
 
-The miss is chain C4, whose real root is a **canvas-only Grafana memory spike**: no text changes, only pixels. With nothing grounding "spike" visually, the trace lands one hop downstream, on the first textual failure (`kubectl … OOMKilled`). The simulator-tuned spike detector in the ablation recovers it. A learned vision adapter is the principled fix.
+Chain C4's real root is a **canvas-only Grafana memory spike**: no text changes, only pixels. Two things recover it:
+1. The **vertical-excursion detector** marks the frame as an anomaly.
+2. The new **visual-anomaly bridge** binds the excursion to its caption, the nearest AX label above the curve (`payments-api memory (GiB)`). It links that caption to the next state elsewhere whose *new* content names the same subsystem. Here that is `kubectl get pods` showing `payments-api-… OOMKilled`, as a `VISUAL_ANOMALY_CORRELATION` edge with evidence `payments-api`, `xmodal_cos=0.34` and `energy=0.76`.
 
-### 3. Visual Patch-MaxSim (default generic encoder)
+A spike that persists across later refreshes is continuity, not new evidence, and does not bridge again. Without the bank (`morphology=False`), the trace lands one hop downstream, on `kubectl`.
+
+**Caveat:** the bridge only sees frames the idle gate lets through. A dashboard *refresh* that redraws the series passes, as in C4. A spike that appears with **no other pixel change** passes the gate in only **79 / 170** probed positions (46 %). The thin stroke barely moves the 8×8 low-frequency hashes, and a finer 16×16 gradient hash did not separate it from cursor noise.
+
+### 3. Visual Patch-MaxSim (default encoder)
 
 | Query | Patch-MaxSim R@1 | Patch (row, col) | Quadrant OK | Global-average R@1 |
 |---|---|---|---|---|
-| red memory spike chart in top-right quadrant | ✅ | (1, 2) | ❌ | ✅ |
+| red memory spike chart in top-right quadrant | ✅ | (1, 3) | ✅ | ✅ |
 | blue architecture tree diagram | ✅ | (1, 2) | ✅ | ✅ |
 | orange warning modal | ✅ | (1, 2) | ✅ | ✅ |
-| green bar chart of build durations | ✅ | (2, 0) | ✅ | ❌ |
-| red failing badge | ❌ (red terminal error text wins) | – | ❌ | ❌ |
-| cyan latency line chart | ✅ | (2, 2) | ✅ | ❌ |
-| **Seed 7** | **83 %** | | **67 %** | **50 %** |
-| 10 other seeds (min / mean) | 67 % / 67 % | | 67 % / 67 % | 50 % / 52 % |
-| *Optional UI-concept ablation* | *100 %* | | *100 %* | *83 %* |
+| green bar chart of build durations | ✅ | (3, 0) | ✅ | ✅ |
+| red failing badge | ✅ | (0, 0) | ✅ | ❌ |
+| cyan latency line chart | ✅ | (3, 2) | ✅ | ✅ |
+| **Seed 7** | **100 %** (6/6) | | **100 %** (6/6) | 83 % |
+| 10 other seeds (min / mean) | 100 % / 100 % | | 100 % / 100 % | 83 % / 83 % |
+| *ablation `morphology=False`* | *83 %* | | *83 %* | *50 %* |
+| *ablation `ui_concepts=True`* | *100 %* | | *100 %* | *83 %* |
 
-These hits come from **colour terms + positioned on-screen text** (panel titles, headings, dialog text), not from understanding shapes. Late interaction still beats a single pooled vector by a wide margin, but this is the honest ceiling of a training-free encoder.
+Text queries reach pixels through colour terms, positioned on-screen text and the morphological bank's words. **Colour binding** matters for "red failing badge". Each detected object carries its own colour, so the patch gets a `red_badge` compound and the query "red badge" adds the same compound. A red log line next to a green badge does not match.
 
-- **int8 vs float32:** same encoder and same queries, with identical Recall@1 (83 %) and localization (67 %). Top event and patch are byte-identical on 5 of 6 queries. On the 6th ("red failing badge"), both precisions return a *wrong* answer and merely break a tie between two near-identical terminal states differently.
-- **Matryoshka 64-d prefix:** R@1 drops to 50 %. The generic descriptor needs the 128-d prefix.
-- **Query-by-example (`screengraph visual --like EVENT`):** this is where the generic descriptor is actually used. It ranks windows that look and read alike; tested on the dashboard events.
+- **int8 vs float32:** identical Recall@1 and localization on every seed. On seed 7 the top event and patch are identical for 6/6 queries; on 2 of the 10 sweep seeds one query breaks a tie between near-identical states differently.
+- **Matryoshka 64-d prefix:** R@1 100 %. **Pure 1-bit 64-bit Hamming MaxSim** (the prefilter alone, no rescoring): 67 %, which is why it is only stage 1.
+- **Query-by-example (`screengraph visual --like EVENT`):** uses the generic Spectral-HOG-JL descriptor. It ranks windows that look and read alike.
+
+### 3b. Held-out generalization of the morphological concept bank
+
+The bank was designed against the simulator's six artifact types, so `evals/morph_heldout.py` draws scenes with an **independent renderer**:
+- random canvas sizes (120–320 × 150–420) and light or dark backgrounds
+- **random hues** rather than the simulator palette, 1–3 px strokes
+- anti-aliasing blur on half of the scenes, sensor noise (σ 0–4), and a **2× up-scaled** variant of every other scene
+- distractor text in every scene
+- hard negatives: volatile series without a spike, unconnected box grids and card grids, docked side panels, unlabelled colour squares, and coloured text
+
+**Protocol:** seed 1234 was the development split. Seed 98765 was run **once**, after the detectors were frozen. It is in the report as `morph_heldout_test_split`, with 60 scenes per case and 840 scenes total.
+
+| Concept | Recall (1× / 2×) | False-positive rate | Notes |
+|---|---|---|---|
+| modal (floating overlay) | **98 %** (97 / 100) | 0.3 % | incl. dimmed-surround variant |
+| tree (node-edge topology) | **88 %** (90 / 87) | 0 % | elbow and diagonal connectors; unconnected boxes never fire |
+| badge (labelled pill) | **87 %** (93 / 80) | **14.9 %** | fires on labelled boxes in grids and on unconnected node boxes (which arguably *are* pills), and on 13 % of coloured-text scenes |
+| bar chart | **83 %** (80 / 87) | 0 % | |
+| spike (vertical excursion) | **62 %** (72 / 52) | **0 %** | 87 % on calm series, **37 % on volatile series**; zero false spikes matters because a spike sets the causal anomaly flag |
+
+What changed on the dev split, in order:
+- **v1, before any change:** spike 51 %, tree 40 %, badge 80 % with 18 % false positives, modal 99 %, bars 85 %.
+- **Renderer bug, not a detector change:** the tree recall was mostly my renderer drawing vertical connector segments as single pixels. With the renderer fixed and the detector unchanged, tree recall was 88 %.
+- **Two generic detector fixes:**
+  - salient-colour mask by channel spread instead of the colour-name saturation cut, because anti-aliased strokes lose saturation
+  - true FWHM (the contiguous run around the peak) instead of "all columns above half prominence"
+- **One fix rejected:** relaxing the volatile-series z-score from 3 to 2 raised volatile recall, but produced a false spike on a simulator dashboard, so it was reverted.
+
+**On real windows**, the live run fired **no** bank concept on the 10 stored real window states, and set **0** anomaly flags. There is no ground truth there: it shows no false spike flags on this small sample, not that real charts are detected.
 
 ### 4. Privacy & secret redaction
 
@@ -98,17 +135,19 @@ These hits come from **colour terms + positioned on-screen text** (panel titles,
 
 | Stage | p50 | p95 | p99 |
 |---|---|---|---|
-| (a) pHash gate check (dropped frames) | 0.090 | 0.136 | 0.194 |
-| (b) Spectral-HOG-JL encode + int8/1-bit quantization + RAM wipe | 1.635 | 2.171 | 3.019 |
-| PII scrub | 0.171 | 0.422 | 0.498 |
-| (c) causal edge inference | 0.128 | 0.282 | 0.339 |
-| SQLite transaction | 0.113 | 0.245 | 0.463 |
-| **Total ingest per stored frame** (budget < 10) | **2.482** | **3.451** | **5.584** |
-| (d) 4-way hybrid RRF + graph retrieval, 77 events (budget < 8) | 1.114 | 1.375 | 1.532 |
-| (d) same, **10,000 events** | **3.155** | **4.320** | 4.634 |
-| `why` causal trace, 10,000 events | 2.714 | 4.218 | – |
+| (a) pHash gate check (dropped frames) | 0.089 | 0.133 | 0.193 |
+| (b) Spectral-HOG-JL + morphological bank encode + int8/1-bit quantization + RAM wipe | 2.761 | 3.528 | 4.074 |
+| PII scrub | 0.157 | 0.351 | 0.426 |
+| (c) causal edge inference | 0.116 | 0.278 | 0.343 |
+| SQLite transaction | 0.119 | 0.205 | 0.343 |
+| **Total ingest per stored frame** (budget < 10) | **3.684** | **4.562** | **6.106** |
+| (d) 4-way hybrid RRF + graph retrieval, 77 events (budget < 8) | 1.068 | 1.241 | 1.323 |
+| (d) same, **10,000 events** | **2.811** | **4.352** | 4.598 |
+| `why` causal trace, 10,000 events | 2.321 | 3.793 | – |
 
-At 10,000 events, about 16 eight-hour days at the simulated rate, the DB is 40.9 MB. Ingest is 2.34 / 3.57 / 5.97 ms (p50/p95/p99), with one 20.8 ms outlier above the 10 ms budget. In an earlier run during a load spike (load average 172) the p99 reached 37 ms, which is why the load is now recorded in the report.
+The morphological bank adds about 0.5–0.8 ms of CPU per stored frame (one connected-component pass, one hole-labelling pass only when a pill-shaped component exists, a row-autocorrelation FFT).
+
+At 10,000 events, about 16 eight-hour days at the simulated rate, the DB is 41.0 MB. Ingest is 3.44 / 4.68 / 6.93 ms (p50/p95/p99), with one 38.7 ms outlier above the 10 ms budget. A repeated gate microbenchmark at load ~8 (7,087 dropped-frame checks) gave p50 0.084 ms but p99 0.296 ms: the tail is scheduling jitter under load, not the matmul.
 
 ### 6. Live macOS capture (`screengraph capture-live --ticks 5 --interval 1.0`)
 
@@ -118,10 +157,11 @@ This ran on this machine as part of the benchmark (`--live 5`). The report store
 |---|---|
 | Permissions | Screen Recording ✅ · Accessibility ❌ (not granted, and not prompted) |
 | Windows per tick | 7 × 5 ticks → 35 frames, **35 with real pixels**, 0 with AX text |
-| Gate | 27 dropped, 8 stored |
-| **Engine ingest** (p50 / p95 / max) | **0.093 / 2.384 / 3.265 ms**, all under 10 ms ✅ |
-| Encode + quantize + wipe on real pixels | 1.66 / 2.25 ms (p50 / p95) |
-| OS side (not part of ingest) | `CGWindowListCreateImage` 28.6 ms p50 per window; ~202 ms per 7-window tick |
+| Gate | 25 dropped, 10 stored |
+| **Engine ingest** (p50 / p95 / max) | **0.087 / 3.403 / 3.748 ms**, all under 10 ms ✅ |
+| Encode + morphology + quantize + wipe on real pixels | 2.22 / 3.00 ms (p50 / p95) |
+| Morphological bank on real windows | 0 concepts fired, 0 anomaly flags on 10 stored states (no ground truth) |
+| OS side (not part of ingest) | `CGWindowListCreateImage` 27.0 ms p50 per window; ~192 ms per 7-window tick |
 | Zero-pixel audit | 0 image files, 0 pixel-sized blobs, 0 frames non-zero after ingest → **PASS** |
 
 The live run found and fixed two real bugs the simulator never exercised. Windows smaller than the encoder's internal grid crashed the HOG stage, and windows smaller than 64 grid pixels would have crashed the gate's resampler. Both now resample exactly, with regression tests.
@@ -190,7 +230,7 @@ flowchart LR
     OS["Window viewport<br/>CGWindowList (ctypes) / simulator"] --> AX["Stage A: AX-tree BLAKE2b hash"]
     subgraph RAM["EphemeralFrameBuffer (RAM only)"]
         PX["pixels (1/8 area average)"] --> PH["Stage B: one matmul Z = L·G·Rᵀ<br/>global + 4 quadrant pHash, dHash<br/>confidence-masked Hamming"]
-        PH -->|changed| ENC["scrub AX text → Spectral-HOG-JL + colour terms + AX tokens<br/>int8 (128-d) + 1-bit (64-bit) codes"]
+        PH -->|changed| ENC["scrub AX text → Spectral-HOG-JL + colour terms<br/>+ morphological concept bank + AX tokens<br/>int8 (128-d) + 1-bit (64-bit) codes"]
     end
     AX --> PH
     PH -->|idle| WIPE["fill(0) + verify + ledger"]
@@ -211,7 +251,8 @@ graph LR
 
 Source layout:
 - `capture/`: `ephemeral.py` (wipe + SHA-256 ledger), `phash.py` (fused gate), `live.py` (ctypes macOS), `os_hooks.py` (Linux/Windows/clipboard/git), `simulator.py`.
-- `embeddings/`: `patch_encoder.py` (Spectral-HOG-JL, int8/1-bit, adapters), `maxsim.py` (funnel + MaxSim + IDF), `ui_concepts.py` (*optional* ablation).
+- `embeddings/`: `patch_encoder.py` (Spectral-HOG-JL, int8/1-bit, adapters), `morphology.py` (cross-modal morphological concept bank), `maxsim.py` (funnel + MaxSim + IDF), `ui_concepts.py` (*optional* ablation).
+- `evals/`: `benchmark_suite.py`, `morph_heldout.py` (independent-renderer generalization test).
 - `graph/`: `causal_engine.py`, `retriever.py`.
 - `db/`, `privacy/`, `interfaces/` (MCP, TUI, CLI), and `engine.py`, which orchestrates the pipeline.
 
@@ -233,11 +274,25 @@ pHash bits are $D_k > \mathrm{median}(D_{1..63})$. Only confident bits count: $|
 
 Each group is L2-normalized and concatenated into $f_p\in\mathbb{R}^{54}$. It is projected by a seeded Achlioptas matrix $R_{ij}\in\{\pm1/\sqrt d\}$, which satisfies the Johnson-Lindenstrauss lemma, and then made **orthogonal to the colour-word subspace**: $\tilde R = R - R\,Q_cQ_c^\top$, with $Q_c$ = QR of the colour-concept basis. Texture energy therefore never registers as a colour match. A unit test checks $|\,\tilde R^\top f\cdot B[\text{colour}]\,|<10^{-4}$.
 
+**Morphological concept bank** (`embeddings/morphology.py`). Connected components of the salient-colour mask (channel spread ≥ 12 % of full scale) are measured with thresholds that are fractions of the window or object size:
+
+| Primitive | Test | Bank words |
+|---|---|---|
+| thin curve | width ≥ 10 % of the window, fill ≤ 0.3, ≥ 85 % column coverage | chart, line |
+| vertical excursion | column-top profile $h$: robust $z=\frac{\max h-\mathrm{med}\,h}{1.4826\,\mathrm{MAD}(h)+\epsilon}\ge6$ (or $\ge3$ and towering ≥ 25 % over all other columns), FWHM ≤ 8 % of width, local rise ≥ 60 % of prominence within ±4 % | spike, anomaly (+ chart, line) |
+| aligned bars | ≥ 3 same-colour solid components on one baseline, similar widths, regular gaps, varying heights | chart, bar |
+| node-edge topology | ≥ 3 similar boxes on ≥ 2 levels with siblings, joined by thin foreground components touching ≥ 2 boxes | tree, diagram |
+| labelled pill | aspect 1.5–7, small, enclosed contrasting holes 3–50 % | badge |
+| floating overlay | ≥ 3 % of the window, not touching its border, centred | modal |
+| row periodicity | autocorrelation peak (lags 2–10) of the horizontal-gradient row profile | table (weak, 0.4) |
+
+Each object binds its own colour, giving compounds such as `red_spike`. Its patch weights $u_{pk}$ enter the same space as query tokens through the word vectors.
+
 **Patch vector.**
 
-$$w_p = \mathrm{norm}\Big(0.6\,\widehat{\tilde R^\top f_p} + \widehat{\textstyle\sum_c v_{pc}B[c]} + 0.8\,\widehat{\textstyle\sum_t \log_2(1+\sum_{n\ni t}\omega_n)\,B[t]}\Big)$$
+$$w_p = \mathrm{norm}\Big(0.6\,\widehat{\tilde R^\top f_p} + \widehat{\textstyle\sum_c v_{pc}B[c]} + \frac{\sum_k u_{pk}B[k]}{\max(1,\lVert\sum_k u_{pk}B[k]\rVert)} + 0.8\,\widehat{\textstyle\sum_t \log_2(1+\sum_{n\ni t}\omega_n)\,B[t]}\Big)$$
 
-$B[\cdot]$ are seeded Gaussian concept vectors. $v_{pc}$ is the salient-colour share, and the $t$ are scrubbed AX tokens placed in the patch where they are rendered.
+$B[\cdot]$ are seeded Gaussian concept vectors, shared by patches and query tokens. $v_{pc}$ is the salient-colour share, $u_{pk}$ are the bank weights, and the $t$ are scrubbed AX tokens placed in the patch where they are rendered. The shared space is stored as the int8 128-d Matryoshka prefix. The descriptor projection is made orthogonal to the colour **and** bank word subspaces. "Zero-shot" here means no training data. The word ↔ primitive table above *is* the alignment, written by hand.
 
 **int8 + 1-bit.** Per window, $s = \max|w_{p,i}|/127$ and $q=\mathrm{round}(w/s)$ on the 128-d Matryoshka prefix. Stage 1 is 64-bit sign codes with a Hamming distance → cos LUT funnel. Stage 2 is **asymmetric** rescoring, $s_n\,(q_{\text{float32}}\cdot q^{(n)}_{\text{int8}})$.
 
@@ -253,6 +308,7 @@ An edge is kept iff $S\ge0.40$ and it carries evidence. Several rules decide wha
 - **Destination novelty:** evidence must be new in $V_j$'s own window.
 - **Ambient suppression:** entities in more than 35 % of recent events are ignored.
 - **Mention-only discount:** a chat source without an error has its path/symbol bridges multiplied by 0.35.
+- **Visual-anomaly bridge:** a *new* excursion in window $i$ carries the entities of its caption $c_i$, the nearest AX label above the curve. If they overlap the destination's new entities, $\mathrm{Bridge}=\min\big(1,\;0.5+0.3\,e_i+0.4\max(0,\cos(a_i,E_j))\big)$. Here $e_i=\min(1,z/12)$ is the excursion energy, and $a_i$ is the cross-modal anomaly vector (caption tokens + `spike`, `anomaly`) in the same concept space as the state embedding $E_j$. Ambient-entity suppression does not apply, because the anomaly is the specific evidence.
 
 The root is the earliest error or anomaly in the causal ancestry, ranked by the geometric-mean edge score.
 
@@ -273,7 +329,7 @@ All competitor statements below are **taken from each project's own documentatio
 | What is persisted | AX text + int8/1-bit patch vectors + causal graph; **no images** | Periodic **snapshots** (screenshots) + a vector DB, encrypted | **JPEG screenshots** + audio chunks (`~/.screenpipe/data`) + SQLite text | **Screenshots** on disk (`~/.screenmind`), auto-deleted after N days (default 7) + SQLite | **JPEG thumbnails** + metadata in a binary `.avis` file |
 | Capture trigger | per-window AX hash + pHash/quadrant gate | periodic snapshots | event-driven (app switch, focus, clicks, typing pauses, clipboard), ~5 s idle fallback | content-change detection with pHash dedupe, max interval 40 s | on demand (files, base64, screenshots, clipboard) |
 | Text source | accessibility tree (+ window titles) | on-device semantic index over snapshots | accessibility tree first, OCR fallback | Gemma 4 vision analysis + EasyOCR | image description / metadata |
-| Visual representation | training-free Spectral-HOG-JL patches (optional learned adapter) | on-device AI (NPU) | – | MiniLM text embeddings of the analysis | CLIP ViT-B/32 (512-d) via ONNX |
+| Visual representation | training-free Spectral-HOG-JL patches + hand-designed morphological concept bank (optional learned adapter) | on-device AI (NPU) | – | MiniLM text embeddings of the analysis | CLIP ViT-B/32 (512-d) via ONNX |
 | Secret / PII handling | format + Luhn + entropy redaction **before indexing**; keyed linkable tags | sensitive-info filtering on by default: snapshots with detected passwords/cards are **not saved** | "PII redaction" listed; mechanism not documented | sensitive-data filter (cards, SSNs, API keys, JWTs, passwords) on by default | EXIF/location metadata scrubbing |
 | Encryption at rest | not built in (rely on disk encryption) | yes (TPM / Windows Hello ESS, VBS enclave) | not stated in the architecture doc | optional (Fernet), off by default | not stated |
 | Cross-app causal "why" graph | **yes** | not documented | not documented | not documented | not documented |
@@ -295,13 +351,17 @@ Sources:
 
 ## Benchmark methodology & caveats
 
-- **The simulator was co-developed with the engine.** Phase 1's visual and C4 numbers (100 %) came from object detectors written alongside the simulator's renderers. Those detectors are now an explicit ablation (`Config(ui_concepts=True)`), and the default numbers above are what a generic encoder achieves.
+- **The simulator was co-developed with the engine.** Phase 1's 100 % visual and C4 numbers came from object detectors written alongside the simulator's renderers; those remain an explicit ablation (`Config(ui_concepts=True)`).
+  - The default **morphological concept bank** uses no simulator coordinates, colours or glyph sizes. But it targets exactly the simulator's artifact types and query words, so its 6/6 and 4/4 are **in-distribution**.
+  - The held-out renderer (§3b) is the generalization evidence, and it shows real weak spots: volatile-series spikes, and badge false positives.
 - **Several engine rules were added after the benchmark exposed failures:**
   - shell-prompt stripping
   - destination novelty
   - the per-window parent cap
   - query IDF
   - the mention-only discount
+  - the caption-bound visual-anomaly bridge (Phase 3)
+  - in the morphology bank, the chroma-spread mask and FWHM width, found on the held-out *development* split
 
   The 10-seed sweep varies noise, data and secrets, not the script. It shows stability, not generalization.
 - **Baselines are our own re-implementations.** Flat timestamp and flat hybrid retrieval (unpruned BM25 + dense, excluding same-window and future events) live in this codebase. The global-average baseline uses the same encoder and query IDF as Patch-MaxSim.
@@ -315,10 +375,12 @@ Sources:
 
 ### Known limitations / roadmap
 
-- **Word-grounded vision needs a learned model.** The open_clip adapter is plumbed in but untested here. Real-desktop retrieval quality needs a labelled dataset.
+- **Broad word-grounded vision needs a learned model.** The bank covers seven primitives; anything else ("login form", "map", "photo of a cat") only matches through colour terms and on-screen text. The open_clip adapter is plumbed in but untested here. Real-desktop retrieval quality needs a labelled dataset.
+- **Spike-only redraws are often dropped by the gate** (79 / 170 pass), so the visual-anomaly path depends on the dashboard also redrawing its series. A cheap fix would be a forced keyframe for dashboard-category windows; it is not implemented.
+- **Badge false positives** (15 % on the held-out negatives) and **volatile-series spike recall** (37 %) are the weakest bank detectors.
 - **AX text on macOS needs Accessibility permission.** Without it, live capture indexes window titles + pixels only. Linux AT-SPI and Windows UIAutomation text are not implemented.
-- **Gate p99 is 0.159–0.194 ms on the session** (quiet vs loaded machine), and 0.256 ms p95 on real frames in the live run. The p99 < 0.15 ms stretch target is not met.
-- **Root ranking** uses an "earliest failure signal" heuristic; canvas-only anomalies are invisible to it without a visual anomaly detector.
+- **Gate p99 is 0.159–0.193 ms on the session** (quiet vs load ~7 machine). It is 0.296 ms over 7,087 repeated checks at load ~8, and 0.273 ms p95 on real frames in the live run. The p99 < 0.16 ms target is only met on a quiet machine.
+- **Root ranking** uses an "earliest failure signal" heuristic. Canvas-only anomalies count as failure signals only when the excursion detector fires.
 
 ## License
 

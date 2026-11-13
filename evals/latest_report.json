@@ -9,11 +9,11 @@
     "machine": "arm64",
     "processor": "arm",
     "cpu_count": 14,
-    "generated_unix": 1794578688,
+    "generated_unix": 1794588762,
     "load_average_1_5_15_at_start": [
-      20.72,
-      31.06,
-      26.08
+      6.37,
+      8.72,
+      12.77
     ],
     "workload": {
       "ticks": 450,
@@ -24,11 +24,11 @@
       "visual_artifacts": 6,
       "injected_secrets": 15
     },
-    "benchmark_wall_s": 40.45,
+    "benchmark_wall_s": 61.19,
     "load_average_1_5_15_at_end": [
-      20.17,
-      29.7,
-      25.81
+      6.24,
+      8.31,
+      12.34
     ]
   },
   "gate_and_storage": {
@@ -42,10 +42,10 @@
     "idle_false_passes": 4,
     "gate_latency_dropped_frames": {
       "n": 373,
-      "p50_ms": 0.0897,
-      "p95_ms": 0.1356,
-      "p99_ms": 0.1941,
-      "max_ms": 0.2914
+      "p50_ms": 0.089,
+      "p95_ms": 0.1332,
+      "p99_ms": 0.1933,
+      "max_ms": 0.2395
     },
     "stored_events": 77,
     "db_bytes_session": 466944,
@@ -70,11 +70,11 @@
       "files_scanned": 3,
       "pixel_blob_suspects": 0,
       "max_blob_bytes": 2048,
-      "ram_buffers_zeroed": 758,
-      "ram_bytes_zeroed": 102081600,
+      "ram_buffers_zeroed": 912,
+      "ram_bytes_zeroed": 115113600,
       "wipe_verification_failures": 0,
       "frames_with_nonzero_pixels_after_ingest": 0,
-      "ledger_chain_head": "6cdc4c4bc2735c2da93ea8dab5c40e8f690061050f67f7b1e1010fbcd0ba3e14",
+      "ledger_chain_head": "53c0fe838bd070a2aef54a620faf8ccf5e9e9045b9d88afc3ba99a1dffca0c2f",
       "guarantee_holds": true
     }
   },
@@ -105,7 +105,7 @@
           "precision": 1.0,
           "recall": 1.0,
           "f1": 1.0,
-          "latency_ms": 0.707
+          "latency_ms": 0.766
         },
         "baseline_timestamp": {
           "root": 19,
@@ -146,7 +146,7 @@
           "precision": 1.0,
           "recall": 1.0,
           "f1": 1.0,
-          "latency_ms": 0.487
+          "latency_ms": 0.579
         },
         "baseline_timestamp": {
           "root": 38,
@@ -186,7 +186,7 @@
           "precision": 1.0,
           "recall": 1.0,
           "f1": 1.0,
-          "latency_ms": 0.493
+          "latency_ms": 0.468
         },
         "baseline_timestamp": {
           "root": 53,
@@ -214,9 +214,10 @@
           67
         ],
         "screengraph": {
-          "root": 63,
-          "root_hit": false,
+          "root": 62,
+          "root_hit": true,
           "chain": [
+            62,
             63,
             64,
             65,
@@ -224,9 +225,9 @@
             67
           ],
           "precision": 1.0,
-          "recall": 0.8333,
-          "f1": 0.9091,
-          "latency_ms": 0.543
+          "recall": 1.0,
+          "f1": 1.0,
+          "latency_ms": 0.491
         },
         "baseline_timestamp": {
           "root": 68,
@@ -241,10 +242,10 @@
       }
     },
     "summary": {
-      "screengraph_root_recall_at_1": 0.75,
-      "screengraph_chain_f1": 0.9773,
+      "screengraph_root_recall_at_1": 1.0,
+      "screengraph_chain_f1": 1.0,
       "screengraph_chain_precision": 1.0,
-      "screengraph_chain_recall": 0.9583,
+      "screengraph_chain_recall": 1.0,
       "timestamp_baseline_root_recall_at_1": 0.0,
       "timestamp_baseline_chain_f1": 0.6833,
       "flat_retrieval_root_recall_at_1": 0.75,
@@ -325,7 +326,8 @@
       "CLIPBOARD_TRANSFER": 5,
       "LINK_FOLLOW": 4,
       "RESEARCH_TO_CODE_EDIT": 7,
-      "UI_TO_LOG_CORRELATION": 3
+      "UI_TO_LOG_CORRELATION": 1,
+      "VISUAL_ANOMALY_CORRELATION": 2
     }
   },
   "visual": {
@@ -339,15 +341,15 @@
           "recall_at_3": true,
           "patch": [
             1,
-            2
+            3
           ],
-          "quadrant_ok": false
+          "quadrant_ok": true
         },
         "patch_maxsim_64d": {
-          "recall_at_1": false
+          "recall_at_1": true
         },
         "patch_hamming_1bit_64d": {
-          "recall_at_1": false
+          "recall_at_1": true
         },
         "global_average": {
           "top_event": 62,
@@ -359,10 +361,10 @@
           "top_event": 62,
           "patch": [
             1,
-            2
+            3
           ],
           "recall_at_1": true,
-          "quadrant_ok": false,
+          "quadrant_ok": true,
           "int8_identical_top1_and_patch": true
         }
       },
@@ -419,7 +421,7 @@
           "recall_at_1": true
         },
         "patch_hamming_1bit_64d": {
-          "recall_at_1": true
+          "recall_at_1": false
         },
         "global_average": {
           "top_event": 45,
@@ -442,31 +444,31 @@
         "query": "green bar chart of build durations",
         "gold_events": 10,
         "patch_maxsim": {
-          "top_event": 53,
+          "top_event": 31,
           "recall_at_1": true,
           "recall_at_3": true,
           "patch": [
-            2,
+            3,
             0
           ],
           "quadrant_ok": true
         },
         "patch_maxsim_64d": {
-          "recall_at_1": false
+          "recall_at_1": true
         },
         "patch_hamming_1bit_64d": {
           "recall_at_1": true
         },
         "global_average": {
-          "top_event": 40,
-          "recall_at_1": false,
-          "recall_at_3": false,
+          "top_event": 4,
+          "recall_at_1": true,
+          "recall_at_3": true,
           "quadrant_ok": false
         },
         "float32_reference": {
-          "top_event": 53,
+          "top_event": 31,
           "patch": [
-            2,
+            3,
             0
           ],
           "recall_at_1": true,
@@ -478,17 +480,17 @@
         "query": "red failing badge",
         "gold_events": 1,
         "patch_maxsim": {
-          "top_event": 13,
-          "recall_at_1": false,
-          "recall_at_3": false,
+          "top_event": 61,
+          "recall_at_1": true,
+          "recall_at_3": true,
           "patch": [
-            2,
+            0,
             0
           ],
-          "quadrant_ok": false
+          "quadrant_ok": true
         },
         "patch_maxsim_64d": {
-          "recall_at_1": false
+          "recall_at_1": true
         },
         "patch_hamming_1bit_64d": {
           "recall_at_1": false
@@ -500,25 +502,25 @@
           "quadrant_ok": false
         },
         "float32_reference": {
-          "top_event": 11,
+          "top_event": 61,
           "patch": [
-            2,
+            0,
             0
           ],
-          "recall_at_1": false,
-          "quadrant_ok": false,
-          "int8_identical_top1_and_patch": false
+          "recall_at_1": true,
+          "quadrant_ok": true,
+          "int8_identical_top1_and_patch": true
         }
       },
       "cyan_line": {
         "query": "cyan latency line chart",
         "gold_events": 10,
         "patch_maxsim": {
-          "top_event": 62,
+          "top_event": 4,
           "recall_at_1": true,
           "recall_at_3": true,
           "patch": [
-            2,
+            3,
             2
           ],
           "quadrant_ok": true
@@ -530,15 +532,15 @@
           "recall_at_1": true
         },
         "global_average": {
-          "top_event": 36,
-          "recall_at_1": false,
+          "top_event": 4,
+          "recall_at_1": true,
           "recall_at_3": true,
           "quadrant_ok": false
         },
         "float32_reference": {
-          "top_event": 62,
+          "top_event": 4,
           "patch": [
-            2,
+            3,
             2
           ],
           "recall_at_1": true,
@@ -548,17 +550,17 @@
       }
     },
     "summary": {
-      "patch_maxsim_recall_at_1": 0.8333,
-      "patch_maxsim_recall_at_3": 0.8333,
-      "patch_quadrant_localization_acc": 0.6667,
-      "patch_maxsim_64d_recall_at_1": 0.5,
+      "patch_maxsim_recall_at_1": 1.0,
+      "patch_maxsim_recall_at_3": 1.0,
+      "patch_quadrant_localization_acc": 1.0,
+      "patch_maxsim_64d_recall_at_1": 1.0,
       "patch_hamming_1bit_recall_at_1": 0.6667,
-      "global_average_recall_at_1": 0.5,
-      "global_average_recall_at_3": 0.6667,
+      "global_average_recall_at_1": 0.8333,
+      "global_average_recall_at_3": 0.8333,
       "global_average_quadrant_localization_acc": 0.0,
-      "int8_vs_float32_top1_and_patch_agreement": 0.8333,
-      "float32_reference_recall_at_1": 0.8333,
-      "float32_reference_localization_acc": 0.6667
+      "int8_vs_float32_top1_and_patch_agreement": 1.0,
+      "float32_reference_recall_at_1": 1.0,
+      "float32_reference_localization_acc": 1.0
     }
   },
   "privacy": {
@@ -682,88 +684,91 @@
   "latency": {
     "phash_gate_check_dropped": {
       "n": 373,
-      "p50_ms": 0.0897,
-      "p95_ms": 0.1356,
-      "p99_ms": 0.1941,
-      "max_ms": 0.2914
+      "p50_ms": 0.089,
+      "p95_ms": 0.1332,
+      "p99_ms": 0.1933,
+      "max_ms": 0.2395
     },
     "phash_gate_check_all": {
       "n": 450,
-      "p50_ms": 0.0891,
-      "p95_ms": 0.1347,
-      "p99_ms": 0.2142,
-      "max_ms": 1.1716
+      "p50_ms": 0.0884,
+      "p95_ms": 0.129,
+      "p99_ms": 0.2005,
+      "max_ms": 0.4199
     },
     "patch_encode_bq_ram_wipe": {
       "n": 77,
-      "p50_ms": 1.6352,
-      "p95_ms": 2.1706,
-      "p99_ms": 3.0187,
-      "max_ms": 4.4008
+      "p50_ms": 2.7614,
+      "p95_ms": 3.528,
+      "p99_ms": 4.0735,
+      "max_ms": 4.4606
     },
     "pii_scrub": {
       "n": 77,
-      "p50_ms": 0.1708,
-      "p95_ms": 0.4224,
-      "p99_ms": 0.4977,
-      "max_ms": 0.5635
+      "p50_ms": 0.1568,
+      "p95_ms": 0.3506,
+      "p99_ms": 0.4257,
+      "max_ms": 0.5139
     },
     "causal_edge_inference": {
       "n": 77,
-      "p50_ms": 0.1278,
-      "p95_ms": 0.2818,
-      "p99_ms": 0.3388,
-      "max_ms": 0.3626
+      "p50_ms": 0.1164,
+      "p95_ms": 0.2776,
+      "p99_ms": 0.3433,
+      "max_ms": 0.4267
     },
     "sqlite_txn_store": {
       "n": 77,
-      "p50_ms": 0.113,
-      "p95_ms": 0.2454,
-      "p99_ms": 0.4626,
-      "max_ms": 0.493
+      "p50_ms": 0.1194,
+      "p95_ms": 0.2046,
+      "p99_ms": 0.3433,
+      "max_ms": 0.464
     },
     "ingest_total_per_stored_frame": {
       "n": 77,
-      "p50_ms": 2.4817,
-      "p95_ms": 3.4514,
-      "p99_ms": 5.5842,
-      "max_ms": 6.4805
+      "p50_ms": 3.6837,
+      "p95_ms": 4.5616,
+      "p99_ms": 6.1063,
+      "max_ms": 8.4441
     },
     "hybrid_rrf_graph_retrieval": {
       "n": 240,
-      "p50_ms": 1.1136,
-      "p95_ms": 1.3748,
-      "p99_ms": 1.5318,
-      "max_ms": 2.895
+      "p50_ms": 1.0684,
+      "p95_ms": 1.241,
+      "p99_ms": 1.323,
+      "max_ms": 1.3482
     },
     "at_scale": {
       "events": 10000,
-      "db_mb": 40.89,
+      "db_mb": 40.98,
       "ingest_total_per_stored_frame": {
         "n": 10000,
-        "p50_ms": 2.3381,
-        "p95_ms": 3.5732,
-        "p99_ms": 5.9708,
-        "max_ms": 20.765
+        "p50_ms": 3.4431,
+        "p95_ms": 4.6788,
+        "p99_ms": 6.926,
+        "max_ms": 38.715
       },
       "hybrid_retrieval": {
         "n": 120,
-        "p50_ms": 3.1548,
-        "p95_ms": 4.3201,
-        "p99_ms": 4.6342,
-        "max_ms": 4.89
+        "p50_ms": 2.8111,
+        "p95_ms": 4.3518,
+        "p99_ms": 4.598,
+        "max_ms": 4.8781
       },
       "causal_why": {
         "n": 4,
-        "p50_ms": 2.7141,
-        "p95_ms": 4.2184,
-        "p99_ms": 4.4051,
-        "max_ms": 4.4518
+        "p50_ms": 2.3214,
+        "p95_ms": 3.7933,
+        "p99_ms": 3.9784,
+        "max_ms": 4.0247
       }
     }
   },
   "ablation_ui_concepts": {
-    "note": "ui_concepts=True adds hand-written chart/spike/bar/modal/badge/tree detectors that were developed together with the simulator; not the default encoder.",
+    "note": "ui_concepts=True adds the hand-written chart/spike/bar/modal/badge/tree detectors that were developed together with the simulator; never the default.",
+    "config": {
+      "ui_concepts": true
+    },
     "visual": {
       "patch_maxsim_recall_at_1": 1.0,
       "patch_maxsim_recall_at_3": 1.0,
@@ -788,6 +793,124 @@
       "flat_retrieval_chain_f1": 0.475
     }
   },
+  "ablation_morphology_off": {
+    "note": "morphology=False: the Phase-2 encoder (Spectral-HOG-JL descriptor + colour names + AX tokens) without the morphological concept bank.",
+    "config": {
+      "morphology": false
+    },
+    "visual": {
+      "patch_maxsim_recall_at_1": 0.8333,
+      "patch_maxsim_recall_at_3": 0.8333,
+      "patch_quadrant_localization_acc": 0.8333,
+      "patch_maxsim_64d_recall_at_1": 0.6667,
+      "patch_hamming_1bit_recall_at_1": 0.6667,
+      "global_average_recall_at_1": 0.5,
+      "global_average_recall_at_3": 0.5,
+      "global_average_quadrant_localization_acc": 0.0,
+      "int8_vs_float32_top1_and_patch_agreement": null,
+      "float32_reference_recall_at_1": null,
+      "float32_reference_localization_acc": null
+    },
+    "causal": {
+      "screengraph_root_recall_at_1": 0.75,
+      "screengraph_chain_f1": 0.9773,
+      "screengraph_chain_precision": 1.0,
+      "screengraph_chain_recall": 0.9583,
+      "timestamp_baseline_root_recall_at_1": 0.0,
+      "timestamp_baseline_chain_f1": 0.6833,
+      "flat_retrieval_root_recall_at_1": 0.75,
+      "flat_retrieval_chain_f1": 0.475
+    }
+  },
+  "morph_heldout_test_split": {
+    "n_per_case": 60,
+    "seed": 98765,
+    "per_concept": {
+      "spike": {
+        "recall": 0.617,
+        "positives": 120,
+        "false_positive_rate": 0.0,
+        "negatives": 720,
+        "recall_1x": 0.717,
+        "recall_2x": 0.517,
+        "fpr_1x": 0.0,
+        "fpr_2x": 0.0
+      },
+      "bar_chart": {
+        "recall": 0.833,
+        "positives": 60,
+        "false_positive_rate": 0.0,
+        "negatives": 780,
+        "recall_1x": 0.8,
+        "recall_2x": 0.867,
+        "fpr_1x": 0.0,
+        "fpr_2x": 0.0
+      },
+      "tree": {
+        "recall": 0.883,
+        "positives": 60,
+        "false_positive_rate": 0.0,
+        "negatives": 780,
+        "recall_1x": 0.9,
+        "recall_2x": 0.867,
+        "fpr_1x": 0.0,
+        "fpr_2x": 0.0
+      },
+      "badge": {
+        "recall": 0.867,
+        "positives": 60,
+        "false_positive_rate": 0.149,
+        "negatives": 780,
+        "recall_1x": 0.933,
+        "recall_2x": 0.8,
+        "fpr_1x": 0.151,
+        "fpr_2x": 0.146
+      },
+      "modal": {
+        "recall": 0.983,
+        "positives": 120,
+        "false_positive_rate": 0.003,
+        "negatives": 720,
+        "recall_1x": 0.967,
+        "recall_2x": 1.0,
+        "fpr_1x": 0.006,
+        "fpr_2x": 0.0
+      }
+    },
+    "detections_by_case": {
+      "spike:spike": 52,
+      "spike:-": 8,
+      "spike_volatile:spike": 22,
+      "spike_volatile:-": 38,
+      "line_no_spike:-": 60,
+      "volatile_no_spike:-": 60,
+      "bars:bar_chart": 50,
+      "bars:-": 8,
+      "bars:modal": 2,
+      "tree:tree": 53,
+      "tree:badge": 7,
+      "boxes_no_connectors:badge": 46,
+      "boxes_no_connectors:-": 14,
+      "card_grid:badge": 55,
+      "card_grid:-": 5,
+      "badge:badge": 52,
+      "badge:-": 8,
+      "unlabelled_squares:-": 60,
+      "modal:modal": 58,
+      "modal:-": 2,
+      "modal_dimmed:modal": 60,
+      "side_panel:-": 60,
+      "coloured_text_only:-": 52,
+      "coloured_text_only:badge": 8
+    },
+    "note": "independent renderer; seed 98765 was evaluated once after the detectors were frozen (seed 1234 was the development split)"
+  },
+  "gate_spike_only_probe": {
+    "spike_only_frames": 170,
+    "passed_gate": 79,
+    "pass_rate": 0.4647,
+    "note": "spike appearing with no other pixel or AX change; with a data refresh (the simulator's C4 chain, typical dashboards) the frame passes as a visual change"
+  },
   "live_capture": {
     "status": "ok",
     "platform": "macOS-27.2.1-arm64-arm-64bit",
@@ -809,43 +932,43 @@
     "frames_seen": 35,
     "frames_with_pixels": 35,
     "frames_with_ax_text": 0,
-    "events_stored": 8,
-    "frames_dropped_by_gate": 27,
+    "events_stored": 10,
+    "frames_dropped_by_gate": 25,
     "os_capture_ms_per_tick": {
       "n": 5,
-      "p50_ms": 201.876,
-      "p95_ms": 272.527,
-      "max_ms": 288.512
+      "p50_ms": 192.071,
+      "p95_ms": 249.138,
+      "max_ms": 262.216
     },
     "os_window_grab_ms": {
       "n": 35,
-      "p50_ms": 28.554,
-      "p95_ms": 46.686,
-      "max_ms": 71.456
+      "p50_ms": 26.967,
+      "p95_ms": 39.992,
+      "max_ms": 57.291
     },
     "os_ax_ms": {
       "n": 35,
       "p50_ms": 0.009,
-      "p95_ms": 0.013,
-      "max_ms": 0.015
+      "p95_ms": 0.012,
+      "max_ms": 0.014
     },
     "ingest_ms": {
       "n": 35,
-      "p50_ms": 0.093,
-      "p95_ms": 2.384,
-      "max_ms": 3.265
+      "p50_ms": 0.087,
+      "p95_ms": 3.403,
+      "max_ms": 3.748
     },
     "gate_ms": {
       "n": 35,
-      "p50_ms": 0.07,
-      "p95_ms": 0.256,
-      "max_ms": 0.324
+      "p50_ms": 0.077,
+      "p95_ms": 0.273,
+      "max_ms": 0.29
     },
     "encode_bq_wipe_ms": {
-      "n": 8,
-      "p50_ms": 1.662,
-      "p95_ms": 2.245,
-      "max_ms": 2.466
+      "n": 10,
+      "p50_ms": 2.221,
+      "p95_ms": 2.998,
+      "max_ms": 3.007
     },
     "ingest_under_10ms": true,
     "active_workspace_windows": 7,
@@ -855,6 +978,20 @@
     "ram_wipe_verification_failures": 0,
     "zero_pixel_guarantee_holds": true,
     "clipboard_enabled": false,
+    "morphology_on_stored_events": {
+      "events": 10,
+      "events_with_concept": {
+        "chart": 0,
+        "line": 0,
+        "bar": 0,
+        "spike": 0,
+        "tree": 0,
+        "badge": 0,
+        "modal": 0
+      },
+      "visual_anomaly_flags": 0,
+      "caption_bound_anomalies": 0
+    },
     "note": "aggregate only: no window titles, app names or text are included in this summary"
   },
   "robustness_seed_sweep": {
@@ -875,11 +1012,11 @@
         "seed": 8,
         "drop_rate": 0.8133,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 84.69
@@ -888,11 +1025,11 @@
         "seed": 9,
         "drop_rate": 0.8289,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 76.82
@@ -901,11 +1038,11 @@
         "seed": 10,
         "drop_rate": 0.8089,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9833,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 86.65
@@ -914,11 +1051,11 @@
         "seed": 11,
         "drop_rate": 0.8289,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 76.82
@@ -927,11 +1064,11 @@
         "seed": 12,
         "drop_rate": 0.8111,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 86.65
@@ -940,11 +1077,11 @@
         "seed": 13,
         "drop_rate": 0.8156,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 84.69
@@ -953,37 +1090,37 @@
         "seed": 14,
         "drop_rate": 0.8222,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.6667,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
-        "projected_30d_mb": 80.76
+        "projected_30d_mb": 84.69
       },
       {
         "seed": 15,
         "drop_rate": 0.8178,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
-        "projected_30d_mb": 80.76
+        "projected_30d_mb": 84.69
       },
       {
         "seed": 16,
         "drop_rate": 0.8244,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 78.79
@@ -992,11 +1129,11 @@
         "seed": 17,
         "drop_rate": 0.82,
         "missed_changes": 0,
-        "root_recall": 0.75,
-        "chain_f1": 0.9773,
-        "visual_r1": 0.6667,
-        "global_r1": 0.5,
-        "localization": 0.6667,
+        "root_recall": 1.0,
+        "chain_f1": 1.0,
+        "visual_r1": 1.0,
+        "global_r1": 0.8333,
+        "localization": 1.0,
         "redaction_recall": 1.0,
         "chain_precision": 1.0,
         "projected_30d_mb": 80.76
@@ -1005,23 +1142,23 @@
     "mean": {
       "drop_rate": 0.8191,
       "missed_changes": 0.0,
-      "root_recall": 0.75,
-      "chain_f1": 0.9779,
-      "visual_r1": 0.6667,
-      "global_r1": 0.5167,
-      "localization": 0.6667,
+      "root_recall": 1.0,
+      "chain_f1": 1.0,
+      "visual_r1": 1.0,
+      "global_r1": 0.8333,
+      "localization": 1.0,
       "redaction_recall": 1.0,
       "chain_precision": 1.0,
-      "projected_30d_mb": 81.739
+      "projected_30d_mb": 82.525
     },
     "min": {
       "drop_rate": 0.8089,
       "missed_changes": 0.0,
-      "root_recall": 0.75,
-      "chain_f1": 0.9773,
-      "visual_r1": 0.6667,
-      "global_r1": 0.5,
-      "localization": 0.6667,
+      "root_recall": 1.0,
+      "chain_f1": 1.0,
+      "visual_r1": 1.0,
+      "global_r1": 0.8333,
+      "localization": 1.0,
       "redaction_recall": 1.0,
       "chain_precision": 1.0,
       "projected_30d_mb": 76.82
@@ -1029,11 +1166,11 @@
     "max": {
       "drop_rate": 0.8289,
       "missed_changes": 0.0,
-      "root_recall": 0.75,
-      "chain_f1": 0.9833,
-      "visual_r1": 0.6667,
-      "global_r1": 0.6667,
-      "localization": 0.6667,
+      "root_recall": 1.0,
+      "chain_f1": 1.0,
+      "visual_r1": 1.0,
+      "global_r1": 0.8333,
+      "localization": 1.0,
       "redaction_recall": 1.0,
       "chain_precision": 1.0,
       "projected_30d_mb": 86.65

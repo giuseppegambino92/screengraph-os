@@ -126,23 +126,20 @@ def _roles(ticks):
 
 
 def test_full_session_root_cause_tracing_default_encoder(session_run):
-    """Default (generic) encoder. C4's true root is a canvas-only Grafana memory spike: without a learned or
-    hand-tuned spike detector nothing marks that frame as an anomaly, so the root lands on the first *textual*
-    failure (kubectl OOMKilled), one hop downstream. Chains must still be 100% precise (no hard negatives)."""
+    """Default encoder (morphological concept bank ON, simulator-tuned ui_concepts OFF). C4's true root is a
+    canvas-only Grafana memory spike: the excursion detector flags it and the caption-bound visual-anomaly
+    bridge links it to the kubectl OOMKilled state. Every chain must be exact (100% precision and recall)."""
     sg, roles = session_run["sg"], _roles(session_run["ticks"])
+    assert not sg.cfg.ui_concepts and sg.cfg.morphology
     for cid, path in WorkspaceSimulator.CHAIN_TARGETS.items():
         res = sg.why(path)
-        root = res["root_causes"][0]["event_id"]
         gold_roots = set(roles[cid].get("root", [])) | (set(roles[cid].get("copy", [])) if cid != "C4" else set())
-        if cid == "C4":
-            assert root in gold_roots | set(roles[cid]["symptom"]), cid
-        else:
-            assert root in gold_roots, cid
+        assert res["root_causes"][0]["event_id"] in gold_roots, cid
         gold_chain = {e for role, ids in roles[cid].items() if role != "fix" for e in ids}
         pred = {c["event_id"] for c in res["chain"]} - set(roles[cid]["fix"])
-        assert pred <= gold_chain, (cid, pred - gold_chain)  # 100% chain precision
-        missing = gold_chain - pred
-        assert not missing or (cid == "C4" and missing <= set(roles[cid]["root"])), (cid, missing)
+        assert pred == gold_chain, (cid, pred ^ gold_chain)
+    rels = {e["relation"] for e in sg.store.edges()}
+    assert "VISUAL_ANOMALY_CORRELATION" in rels
 
 
 def test_full_session_root_cause_tracing_ui_concepts_ablation(session_run_ui):

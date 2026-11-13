@@ -392,16 +392,48 @@ def scale_eval(n_target: int, base: Path, seed: int) -> dict:
     return out
 
 
-def ablation_ui_concepts(base: Path, seed: int) -> dict:
-    """Same session with the OPTIONAL simulator-tuned UI-object detectors switched on."""
-    sg = ScreenGraph(Config.ephemeral(base / "ablation", ui_concepts=True))
+def ablation(base: Path, seed: int, name: str, note: str, **overrides) -> dict:
+    """Same session with one encoder switch flipped."""
+    sg = ScreenGraph(Config.ephemeral(base / f"ablation_{name}", **overrides))
     sim = WorkspaceSimulator(seed=seed)
     ticks = run_session(sg, sim)["ticks"]
-    out = {"note": "ui_concepts=True adds hand-written chart/spike/bar/modal/badge/tree detectors that were "
-                   "developed together with the simulator; not the default encoder.",
+    out = {"note": note, "config": overrides,
            "visual": visual_eval(sg, ticks)["summary"], "causal": causal_eval(sg, ticks)["summary"]}
     sg.close()
     return out
+
+
+def ablation_ui_concepts(base: Path, seed: int) -> dict:
+    return ablation(base, seed, "ui", "ui_concepts=True adds the hand-written chart/spike/bar/modal/badge/tree "
+                    "detectors that were developed together with the simulator; never the default.", ui_concepts=True)
+
+
+def ablation_morphology_off(base: Path, seed: int) -> dict:
+    return ablation(base, seed, "nomorph", "morphology=False: the Phase-2 encoder (Spectral-HOG-JL descriptor + colour "
+                    "names + AX tokens) without the morphological concept bank.", morphology=False)
+
+
+def gate_spike_only_probe(seeds: int = 10, positions: int = 17) -> dict:
+    """How often does the perceptual gate pass a frame whose ONLY change is a narrow chart spike
+    (no data refresh, identical AX tree)? Frames the gate drops never reach the detectors."""
+    from screengraph.capture.models import BoundingBox
+    from screengraph.capture.phash import PerceptualGate, ax_tree_hash
+    from screengraph.capture.simulator import DashboardWindow
+
+    passed = total = 0
+    for sd in range(seeds):
+        for pos in np.linspace(0.12, 0.92, positions):
+            d = DashboardWindow("dash", BoundingBox(0, 0, 1280, 1440, 1), pid=1, seed=sd)
+            g = PerceptualGate(4, 6, quadrant_threshold=2)
+            px, nodes, _ = d.render()
+            ax = ax_tree_hash(d.title, d.url, "", nodes)
+            g.check("d", ax, px)
+            d.spike_at = float(pos)
+            total += 1
+            passed += g.check("d", ax, d.render()[0]).passed
+    return {"spike_only_frames": total, "passed_gate": passed, "pass_rate": round(passed / total, 4),
+            "note": "spike appearing with no other pixel or AX change; with a data refresh (the simulator's C4 "
+                    "chain, typical dashboards) the frame passes as a visual change"}
 
 
 def seed_sweep(seeds: list[int], base: Path) -> dict:
@@ -438,6 +470,7 @@ def main(argv=None) -> dict:
     ap.add_argument("--keep", action="store_true", help="keep the temporary data directory")
     ap.add_argument("--sweep", type=int, default=10, help="extra simulator seeds for the robustness sweep (0 = skip)")
     ap.add_argument("--no-ablation", action="store_true", help="skip the ui_concepts=True ablation run")
+    ap.add_argument("--heldout", type=int, default=60, help="scenes per case for the held-out morphology test (0 = skip)")
     ap.add_argument("--live", type=int, default=0, help="also capture N real desktop ticks (macOS) into a temp DB")
     args = ap.parse_args(argv)
 
@@ -481,6 +514,15 @@ def main(argv=None) -> dict:
         sg.close()
         if not args.no_ablation:
             report["ablation_ui_concepts"] = ablation_ui_concepts(base, args.seed)
+            report["ablation_morphology_off"] = ablation_morphology_off(base, args.seed)
+        if args.heldout:
+            from evals.morph_heldout import run as heldout_run
+
+            report["morph_heldout_test_split"] = heldout_run(args.heldout, seed=98765)
+            report["morph_heldout_test_split"]["note"] = (
+                "independent renderer; seed 98765 was evaluated once after the detectors were frozen "
+                "(seed 1234 was the development split)")
+        report["gate_spike_only_probe"] = gate_spike_only_probe()
         if args.live:
             from screengraph.capture.live import run_live_capture
 
@@ -537,6 +579,18 @@ def print_report(r: dict) -> None:
         con.print(f"ablation ui_concepts=True: visual R@1 {ab['visual']['patch_maxsim_recall_at_1']:.0%}, "
                   f"localization {ab['visual']['patch_quadrant_localization_acc']:.0%}, "
                   f"root R@1 {ab['causal']['screengraph_root_recall_at_1']:.0%}, chain F1 {ab['causal']['screengraph_chain_f1']:.3f}")
+    if "ablation_morphology_off" in r:
+        ab = r["ablation_morphology_off"]
+        con.print(f"ablation morphology=False: visual R@1 {ab['visual']['patch_maxsim_recall_at_1']:.0%}, "
+                  f"localization {ab['visual']['patch_quadrant_localization_acc']:.0%}, "
+                  f"root R@1 {ab['causal']['screengraph_root_recall_at_1']:.0%}, chain F1 {ab['causal']['screengraph_chain_f1']:.3f}")
+    if "morph_heldout_test_split" in r:
+        pc = r["morph_heldout_test_split"]["per_concept"]
+        con.print("held-out morphology (independent renderer): " + ", ".join(
+            f"{k} R {v['recall']:.0%}/FPR {v['false_positive_rate']:.1%}" for k, v in pc.items()))
+    if "gate_spike_only_probe" in r:
+        gp = r["gate_spike_only_probe"]
+        con.print(f"gate pass rate for spike-only redraws: {gp['passed_gate']}/{gp['spike_only_frames']}")
     if "live_capture" in r:
         lv = r["live_capture"]
         con.print(f"live capture: {lv.get('status')} ticks={lv.get('ticks')} frames={lv.get('frames_seen')} "

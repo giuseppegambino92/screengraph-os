@@ -85,7 +85,7 @@ class Store:
 
     def insert_vectors(self, event_id: int, dim: int, rows: int, cols: int, global_i8: bytes, global_scale: float,
                        global_bq: bytes, patch_bq: bytes, patch_i8: bytes, patch_scale: float, concepts: list) -> None:
-        compact = {str(i): c for i, c in enumerate(concepts) if c}  # only patches with concepts
+        compact = {str(i): _pack_concepts(c) for i, c in enumerate(concepts) if c}  # only patches with concepts
         self.conn.execute(
             "INSERT INTO event_vectors VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (event_id, dim, rows, cols, global_i8, float(global_scale), global_bq, patch_bq, patch_i8,
@@ -211,7 +211,7 @@ class Store:
     def get_concepts(self, event_id: int, patches: int = 16) -> list:
         r = self.conn.execute("SELECT concepts FROM event_vectors WHERE event_id = ?", (event_id,)).fetchone()
         compact = json.loads(r[0]) if r and r[0] else {}
-        return [compact.get(str(i), {}) for i in range(patches)]
+        return [_unpack_concepts(compact.get(str(i), {})) for i in range(patches)]
 
     def redaction_counts(self) -> dict[str, int]:
         return {r[0]: r[1] for r in self.conn.execute("SELECT kind, COUNT(*) FROM redaction_log GROUP BY kind")}
@@ -249,3 +249,22 @@ class Store:
             if os.path.exists(p) and suffix != "-shm":
                 total += os.path.getsize(p)
         return total
+
+
+def _pack_concepts(c: dict) -> str:
+    """{"red": 0.83, "chart": 1.0} -> "red=.83 chart" (weights >= 1 are implicit, 2 decimals)."""
+    out = []
+    for k, v in c.items():
+        v = round(float(v), 2)
+        out.append(k if v >= 1.0 else f"{k}={v:.2f}".replace("=0.", "=."))
+    return " ".join(out)
+
+
+def _unpack_concepts(v) -> dict:
+    if isinstance(v, dict):  # rows written before the packed format
+        return v
+    out = {}
+    for tok in v.split():
+        k, _, w = tok.partition("=")
+        out[k] = float(w) if w else 1.0
+    return out

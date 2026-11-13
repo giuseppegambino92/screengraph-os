@@ -191,19 +191,29 @@ class CausalNode:
     novel_entities: Optional[dict] = None
     novel_text: str = ""
     url_changed: bool = True
+    # pure-pixel anomalies (chart excursions) with the entities of the label they plot, and the
+    # cross-modal vector (caption tokens + morphological bank words) used for visual-to-code similarity
+    anomalies: list = field(default_factory=list)
+    anomaly_vec: Optional[np.ndarray] = None
+    anomaly_novel: bool = False
 
     @classmethod
     def build(cls, eid: int, ts: float, window_id: str, app_category: str, global_vec: np.ndarray,
               entities: dict, body: str, title: str = "", url: str = "", doc_path: str = "",
               copied: str = "", content_lines: Optional[list[str]] = None) -> "CausalNode":
-        ents = {k: set(v) for k, v in entities.items() if k not in ("flags", "visual")}
+        ents = {k: set(v) for k, v in entities.items() if k not in ("flags", "visual", "visual_anomalies")}
         text = norm_text(f"{title} {body} {url} {' '.join(entities.get('search', []))}")
         flags = entities.get("flags", [])
         src_lines = content_lines if content_lines is not None else (body or "").splitlines()
         lines = frozenset(l.strip() for l in src_lines if l.strip())
-        return cls(eid, ts, window_id, app_category, np.asarray(global_vec, np.float32), ents, text,
+        node = cls(eid, ts, window_id, app_category, np.asarray(global_vec, np.float32), ents, text,
                    norm_url(url) if url else "", (doc_path or "").lower().rsplit("/", 1)[-1],
                    norm_text(copied) if copied else "", "error" in flags or "anomaly" in flags, lines)
+        for a in entities.get("visual_anomalies", []):
+            ae = extract_entities(a["caption"])
+            node.anomalies.append({"caption": a["caption"], "energy": float(a.get("energy", 1.0)),
+                                   "entities": {k: set(v) for k, v in ae.items() if k not in ("flags",) and v}})
+        return node
 
 
 @dataclass
@@ -303,6 +313,21 @@ class CausalEngine:
             offer(1.0, "clipboard", [i.copied_norm[:80]])
         if j.url_changed and j.url_norm and j.url_norm != i.url_norm and j.url_norm in i.entities.get("urls", set()):
             offer(0.9, "link", [j.url_norm])
+        if i.anomalies and i.anomaly_novel and i.window_id != j.window_id:
+            # Visual-anomaly bridge: a NEW excursion on a monitoring canvas, bound to its caption
+            # ("payments-api memory"), followed by a state elsewhere whose new content names the same
+            # subsystem. Entity overlap gates the edge (DF-suppression does not apply: the anomaly itself
+            # is the specific evidence); strength grows with the excursion energy and the cross-modal
+            # visual-to-code cosine between the anomaly vector and the destination state.
+            jn = j.novel_entities if j.novel_entities is not None else j.entities
+            xm = max(0.0, float(i.anomaly_vec @ j.global_vec)) if i.anomaly_vec is not None else 0.0
+            for a in i.anomalies:
+                ov = set()
+                for k in ("resources", "paths", "hosts", "routes", "symbols", "errors"):
+                    ov |= a["entities"].get(k, set()) & jn.get(k, set())
+                if ov:
+                    offer(min(1.0, 0.5 + 0.3 * a["energy"] + 0.4 * xm), "visual_anomaly",
+                          sorted(ov) + [f"xmodal_cos={xm:.2f}", f"energy={a['energy']:.2f}"])
         if i.window_id == j.window_id:
             # Same window: only content that is *new* in V_j relative to V_i can carry
             # evidence (a chat reply, a selection, a fresh log line); persistent text is continuity.
@@ -338,6 +363,8 @@ class CausalEngine:
             return "CLIPBOARD_TRANSFER"
         if kind == "link":
             return "LINK_FOLLOW"
+        if kind == "visual_anomaly":
+            return "VISUAL_ANOMALY_CORRELATION"
         if bridge <= 0:
             return "SEMANTIC_CONTINUATION"
         if cj == "ide" and ci in ("browser", "chat"):
@@ -352,6 +379,10 @@ class CausalEngine:
 
     def _novelty(self, node: CausalNode) -> None:
         prev = self._last_by_window.get(node.window_id)
+        # an anomaly is new evidence only if the previous state of this window did not already show an
+        # anomaly under the same caption (a spike persisting across refreshes is continuity, not a cause)
+        prev_caps = {a["caption"] for a in prev.anomalies} if prev is not None else set()
+        node.anomaly_novel = any(a["caption"] not in prev_caps for a in node.anomalies)
         if prev is None:
             node.novel_entities = node.entities
             node.novel_text = node.text_norm

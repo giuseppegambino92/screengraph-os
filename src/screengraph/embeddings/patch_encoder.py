@@ -30,6 +30,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from screengraph.embeddings.morphology import MORPH_CONCEPTS, SHAPES, detect_morphology
+
 # ----------------------------------------------------------------------------
 # Tokenization & concept canonicalization
 # ----------------------------------------------------------------------------
@@ -57,7 +59,9 @@ CANON = {
     "dialog": "modal", "popup": "modal", "pop": "modal", "alert": "modal", "overlay": "modal",
     "modals": "modal", "dialogs": "modal",
     "pill": "badge", "chip": "badge", "tag": "badge", "label": "badge", "badges": "badge",
-    "hierarchy": "tree", "trees": "tree", "flowchart": "diagram", "diagrams": "diagram", "architecture": "architecture",
+    "hierarchy": "tree", "trees": "tree", "flowchart": "diagram", "diagrams": "diagram", "flow": "diagram",
+    "anomalies": "anomaly", "anomalous": "anomaly", "outlier": "anomaly", "outliers": "anomaly",
+    "tables": "table", "tabular": "table", "rows": "table", "row": "table", "grid": "table",
     "dark": "dark", "light": "light",
     "failing": "failed", "failure": "failed", "fail": "failed", "fails": "failed",
     "errors": "error", "warnings": "warning", "mem": "memory", "ram": "memory", "oom": "oomkilled",
@@ -284,9 +288,11 @@ class VisualAnalysis:
     color_frac: np.ndarray  # (P, NC)
     ui_weights: Optional[np.ndarray] = None  # optional UI-object layer
     objects: list[dict] = field(default_factory=list)
+    morph_weights: Optional[np.ndarray] = None  # (P, len(MORPH_CONCEPTS)) cross-modal morphological concept bank
 
 
-def analyze_visual(pixels: np.ndarray, rows: int, cols: int, buf=None, ui_concepts: bool = False) -> VisualAnalysis:
+def analyze_visual(pixels: np.ndarray, rows: int, cols: int, buf=None, ui_concepts: bool = False,
+                   morphology: bool = True) -> VisualAnalysis:
     """Generic multi-scale patch descriptors for ANY RGB(A) uint8 array (simulator grid or real capture).
 
     Per patch p of the rows x cols grid:
@@ -344,6 +350,9 @@ def analyze_visual(pixels: np.ndarray, rows: int, cols: int, buf=None, ui_concep
     density = np.bincount(pm, weights=(mag > 0.04).ravel().astype(np.float32), minlength=P) / cnt
     mmag = np.bincount(pm, weights=mag.ravel(), minlength=P) / cnt
     edges = np.stack([np.sqrt(density), np.sqrt(np.minimum(mmag * 4, 1.0))], axis=1)
+    morph_w, objects = None, []
+    if morphology:
+        morph_w, objects = detect_morphology(pixels, colors, rows, cols, pmap, lum, buf)
     # wipe every pixel-derived intermediate that could be inverted back to an image:
     # resampled channels, opponent image, its per-block copy and full DCT, gradient maps
     for arr in (lum, small, opp, blocks, coef, gx, gy, mag, ang):
@@ -366,12 +375,13 @@ def analyze_visual(pixels: np.ndarray, rows: int, cols: int, buf=None, ui_concep
     win = hist.sum(0)
     cw[:, _VC_INDEX["dark" if win[0] >= win[2] else "light"]] = 0.3
 
-    ui_w, objects = None, []
+    ui_w = None
     if ui_concepts:
         from screengraph.embeddings.ui_concepts import detect_ui_concepts
 
-        ui_w, objects = detect_ui_concepts(colors, rows, cols, pmap, buf)
-    return VisualAnalysis(feats, cw, frac, ui_w, objects)
+        ui_w, ui_objects = detect_ui_concepts(colors, rows, cols, pmap, buf)
+        objects = objects + [dict(o, source="ui_concepts") for o in ui_objects]
+    return VisualAnalysis(feats, cw, frac, ui_w, objects, morph_w)
 
 
 # ----------------------------------------------------------------------------
@@ -462,19 +472,21 @@ class PatchEncoder:
 
     def __init__(self, dim: int = 256, rows: int = 4, cols: int = 4, seed: int = 0x5C2E,
                  visual_weight: float = 1.0, text_weight: float = 0.8, descriptor_weight: float = 0.6,
-                 ui_concepts: bool = False, adapter: Optional[VisionAdapter] = None):
+                 ui_concepts: bool = False, adapter: Optional[VisionAdapter] = None, morphology: bool = True):
         self.dim, self.rows, self.cols = dim, rows, cols
         self.basis = ConceptBasis(dim, seed)
         self.B_vis = self.basis.matrix(VISUAL_CONCEPTS)
         self.a, self.b, self.a_desc = visual_weight, text_weight, descriptor_weight
         self.ui_concepts = ui_concepts
+        self.morphology = morphology
+        self.B_morph = self.basis.matrix(MORPH_CONCEPTS)
         self.adapter = adapter
         rng = np.random.default_rng(seed + 17)
         # Achlioptas signed random projection R in {+1, -1}/sqrt(d): FEATURE_DIM -> d
         R = rng.choice(np.array([-1.0, 1.0], np.float32), size=(FEATURE_DIM, dim)) / np.sqrt(dim)
-        # cross-modal orthogonality: remove the colour/theme concept subspace from the descriptor projection so
-        # generic texture/spectrum energy can never masquerade as a colour word match
-        Qc, _ = np.linalg.qr(self.B_vis.T.astype(np.float64))
+        # cross-modal orthogonality: remove the colour/theme AND morphological word subspaces from the descriptor
+        # projection so generic texture/spectrum energy can never masquerade as a word match
+        Qc, _ = np.linalg.qr(np.vstack([self.B_vis, self.B_morph]).T.astype(np.float64))
         self.R = (R - (R @ Qc) @ Qc.T).astype(np.float32)
         if ui_concepts:
             from screengraph.embeddings.ui_concepts import UI_CONCEPTS
@@ -501,9 +513,7 @@ class PatchEncoder:
 
     def encode_query_tokens(self, query: str) -> tuple[list[str], np.ndarray]:
         toks = list(dict.fromkeys(tokenize(query, expand_identifiers=False)))
-        if self.ui_concepts:
-            from screengraph.embeddings.ui_concepts import SHAPES
-
+        if self.morphology or self.ui_concepts:  # attribute binding: "red badge" -> red_badge
             colors = [t for t in toks if t in _COLOR_SET]
             toks += [f"{c}_{s}" for c in colors for s in toks if s in SHAPES]
         if not toks:
@@ -526,11 +536,15 @@ class PatchEncoder:
         concepts = [dict() for _ in range(P)]
         if pixels is not None:
             h, w = pixels.shape[:2]
-            va = analyze_visual(pixels, self.rows, self.cols, buf, self.ui_concepts)
+            va = analyze_visual(pixels, self.rows, self.cols, buf, self.ui_concepts, self.morphology)
             D = l2n(va.features @ self.R)
             C = va.concept_weights @ self.B_vis
             col_present = np.linalg.norm(C, axis=1) > 0
             V = self.a_desc * D + self.a * l2n(C)
+            if va.morph_weights is not None:
+                M = va.morph_weights @ self.B_morph
+                # weak evidence (e.g. row periodicity 0.4) stays weak; strong multi-word objects cap at norm 1
+                V = V + self.a * M / np.maximum(np.linalg.norm(M, axis=1, keepdims=True), 1.0)
             if va.ui_weights is not None:
                 U = va.ui_weights @ self.B_ui
                 V = V + self.a * l2n(U)
@@ -541,6 +555,9 @@ class PatchEncoder:
             for p in range(P):
                 concepts[p] = {VISUAL_CONCEPTS[j]: round(float(va.concept_weights[p, j]), 3)
                                for j in np.flatnonzero(va.concept_weights[p] >= 0.5)}
+                if va.morph_weights is not None:
+                    concepts[p].update({MORPH_CONCEPTS[j]: round(float(va.morph_weights[p, j]), 3)
+                                        for j in np.flatnonzero(va.morph_weights[p] >= 0.5) if "_" not in MORPH_CONCEPTS[j]})
                 if va.ui_weights is not None:
                     concepts[p].update({self.ui_vocab[j]: round(float(va.ui_weights[p, j]), 3)
                                         for j in np.flatnonzero(va.ui_weights[p] >= 0.5) if "_" not in self.ui_vocab[j]})
@@ -583,7 +600,10 @@ class PatchEncoder:
             patches[empty] = self.basis.vec("__empty_patch")
         patches = l2n(patches).astype(np.float32)
 
-        gtoks = tokenize(title) * 2 + all_tokens + tokenize(extra_text)
+        # detected objects' bank words join the window-level vector, so a pixel-only event (a chart spike with no
+        # text change) is also reachable by the dense text channel ("memory spike", "anomaly")
+        obj_words = sorted({c for pc in concepts for c in pc if c in MORPH_CONCEPTS and c != "table"})
+        gtoks = tokenize(title) * 2 + all_tokens + tokenize(extra_text) + obj_words
         tv = self.text_vector(gtoks)
         vm = Vn.mean(0) if vis_present.any() else np.zeros(self.dim, np.float32)
         g = 0.85 * tv + 0.15 * l2n(vm) if np.linalg.norm(tv) > 0 else vm

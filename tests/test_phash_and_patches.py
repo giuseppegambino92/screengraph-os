@@ -272,7 +272,7 @@ def test_vision_adapter_plumbing():
 
     enc = PatchEncoder(adapter=Fake())
     toks, Q = enc.encode_query_tokens("red chart")
-    assert toks[-1] == "<fake>" and Q.shape == (3, 256)
+    assert toks[-1] == "<fake>" and Q.shape == (4, 256)  # red, chart, red_chart (binding), adapter
     e = enc.encode(np.zeros((40, 40, 3), np.uint8), [])
     s_with, _ = maxsim(Q, e.patch_vecs[None])
     s_without, _ = maxsim(Q[:-1], e.patch_vecs[None])

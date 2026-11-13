@@ -338,6 +338,17 @@ def run_live_capture(ticks: int = 5, interval: float = 1.0, data_dir: Optional[P
                 time.sleep(max(0.0, interval - (time.perf_counter() - t0)))
         ws = engine.active_workspace()
         audit = engine.privacy_audit()
+        # how often the morphological concept bank fires on REAL windows (counts only). There is no ground
+        # truth here; a high spike/anomaly rate on ordinary windows would mean false causal anomaly flags.
+        fired = {w: 0 for w in ("chart", "line", "bar", "spike", "tree", "badge", "modal")}
+        anomaly_events = caption_bound = 0
+        evs = engine.store.timeline(0, 1e13, limit=100000)
+        for ev in evs:
+            vis = set(ev["entities"].get("visual", []))
+            for wd in fired:
+                fired[wd] += wd in vis
+            anomaly_events += "anomaly" in ev["entities"].get("flags", []) and "spike" in vis
+            caption_bound += bool(ev["entities"].get("visual_anomalies"))
         return {
             "status": "ok", "platform": platform.platform(), "backend": "ctypes CoreGraphics/CoreFoundation/AX",
             "permissions": perms, "ticks": ticks, "interval_s": interval,
@@ -353,6 +364,9 @@ def run_live_capture(ticks: int = 5, interval: float = 1.0, data_dir: Optional[P
             "ram_wipe_verification_failures": audit["ram"]["verification_failures"],
             "zero_pixel_guarantee_holds": audit["zero_pixel_guarantee_holds"] and nonzero_after == 0,
             "clipboard_enabled": allow_clipboard,
+            "morphology_on_stored_events": {"events": len(evs), "events_with_concept": fired,
+                                            "visual_anomaly_flags": anomaly_events,
+                                            "caption_bound_anomalies": caption_bound},
             "note": "aggregate only: no window titles, app names or text are included in this summary",
         }
     finally:

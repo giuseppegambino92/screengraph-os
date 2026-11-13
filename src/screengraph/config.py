@@ -39,6 +39,7 @@ class Config:
     visual_weight: float = 1.0  # perceptual colour concepts (+ optional UI layer / adapter)
     text_weight: float = 0.8  # positioned AX tokens
     descriptor_weight: float = 0.6  # generic Spectral-HOG-JL descriptor
+    morphology: bool = True  # cross-modal morphological concept bank (generic primitives; default ON)
     ui_concepts: bool = False  # OPTIONAL hand-written UI-object detectors (ablation; simulator-tuned)
     vision_adapter: Optional[str] = None  # e.g. "open_clip:ViT-B-32/laion2b_s34b_b79k" if installed
     embed_seed: int = 0x5C2E

@@ -183,6 +183,9 @@ def test_cli_eval_runs_benchmark(tmp_path):
     assert v["patch_maxsim_recall_at_1"] == v["float32_reference_recall_at_1"]
     assert v["patch_quadrant_localization_acc"] == v["float32_reference_localization_acc"]
     assert rep["ablation_ui_concepts"]["causal"]["screengraph_root_recall_at_1"] == 1.0
+    # default encoder (morphological concept bank, no simulator-tuned detectors)
+    assert v["patch_maxsim_recall_at_1"] == 1.0 and v["patch_quadrant_localization_acc"] == 1.0
+    assert rep["causal"]["summary"]["screengraph_root_recall_at_1"] == 1.0
 
 
 

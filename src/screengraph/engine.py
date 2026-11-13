@@ -26,7 +26,7 @@ from screengraph.config import Config
 from screengraph.db.store import Store
 from screengraph.embeddings.maxsim import PatchIndex
 from screengraph.embeddings.patch_encoder import (PatchEncoder, binary_quantize, dequantize_int8, matryoshka,
-                                                  quantize_int8)
+                                                  quantize_int8, tokenize)
 from screengraph.graph.causal_engine import (CHROME_ROLES, ROLE_SEP, CausalEngine, CausalGraph, CausalNode, Edge,
                                              extract_entities, norm_text)
 from screengraph.graph.retriever import DenseIndex, HybridRetriever
@@ -55,7 +55,8 @@ class ScreenGraph:
 
         self.encoder = PatchEncoder(self.cfg.dim, self.cfg.grid_rows, self.cfg.grid_cols, self.cfg.embed_seed,
                                     self.cfg.visual_weight, self.cfg.text_weight, self.cfg.descriptor_weight,
-                                    ui_concepts=self.cfg.ui_concepts, adapter=load_adapter(self.cfg.vision_adapter))
+                                    ui_concepts=self.cfg.ui_concepts, adapter=load_adapter(self.cfg.vision_adapter),
+                                    morphology=self.cfg.morphology)
         self.gate = PerceptualGate(self.cfg.phash_threshold, self.cfg.dhash_threshold, self.cfg.phash_size,
                                    self.cfg.quadrant_threshold)
         self.ledger = ZeroingLedger()
@@ -106,9 +107,18 @@ class ScreenGraph:
 
     def _node_from_row(self, ev: dict, g: np.ndarray) -> CausalNode:
         ents = ev["entities"]
-        return CausalNode.build(ev["id"], ev["ts"], ev["window_id"], ev["app_category"], g, ents,
+        node = CausalNode.build(ev["id"], ev["ts"], ev["window_id"], ev["app_category"], g, ents,
                                 ev.get("body", ""), ev.get("title", ""), ev.get("url", ""), ev.get("doc_path", ""),
                                 (ents.get("clipboard") or [""])[0])
+        return self._attach_anomaly_vec(node)
+
+    def _attach_anomaly_vec(self, node: CausalNode) -> CausalNode:
+        """Cross-modal anomaly vector: caption tokens + the morphological bank words of an excursion, in the
+        same concept space as text states, so cos(anomaly, destination) is a visual-to-code similarity."""
+        if node.anomalies:
+            node.anomaly_vec = self.encoder.text_vector(
+                [t for a in node.anomalies for t in tokenize(a["caption"])] + ["spike", "anomaly"])
+        return node
 
     def close(self) -> None:
         with contextlib.suppress(Exception):
@@ -173,6 +183,9 @@ class ScreenGraph:
             ents["visual"] = visual
             if "spike" in visual and "anomaly" not in ents["flags"]:
                 ents["flags"].append("anomaly")
+        anomalies = self._caption_anomalies(enc.objects, frame.ax_nodes, lines, frame)
+        if anomalies:
+            ents["visual_anomalies"] = anomalies
         if clip:
             ents["clipboard"] = [norm_text(clip.text)[:500]]
         rec = {
@@ -196,6 +209,7 @@ class ScreenGraph:
             node = CausalNode.build(eid, frame.ts, frame.window_id, frame.app_category, g, ents, body, title.text,
                                     url.text, frame.doc_path, clip.text if clip else "",
                                     content_lines=[f"{r}{ROLE_SEP}{t}" for r, t in content])
+            self._attach_anomaly_vec(node)
             prev_cat = self.causal._last_cat
             t5 = time.perf_counter()
             edges = self.causal.infer(node)
@@ -215,6 +229,37 @@ class ScreenGraph:
         self.graph.add_edges(edges)
         timings["total_ms"] = (time.perf_counter() - t0) * 1e3
         return IngestResult(True, dec.reason, eid, edges, len(reds), timings)
+
+    def _caption_anomalies(self, objects: list[dict], ax_nodes, lines: list[str], frame: ViewportFrame) -> list[dict]:
+        """Pure-pixel anomalies (vertical excursions) bound to the subsystem they plot.
+
+        Caption association (document-layout convention): the scrubbed AX label nearest *above* the
+        curve's bounding box that overlaps it horizontally, or a label inside it, within 25% of the
+        window height. The caption text is what the anomaly is *about* ("payments-api memory")."""
+        out = []
+        if not objects or frame.pixels is None:
+            return out
+        h = max(1, frame.pixels.shape[0])
+        for o in objects:
+            if o.get("type") != "spike" or "bbox" not in o:
+                continue
+            ox, oy, ow, oh = o["bbox"]
+            best, best_d = None, None
+            for n, txt in zip(ax_nodes, lines):
+                if not txt or n.role in CHROME_ROLES:
+                    continue
+                nx, ny, nw, nh = n.bbox
+                if nx > ox + ow or nx + nw < ox:  # must overlap the curve horizontally
+                    continue
+                if ny + nh > oy + oh or ny < oy - 0.25 * h:  # above (or inside) the curve, not far above
+                    continue
+                d = max(0, oy - (ny + nh))
+                if best_d is None or d < best_d:
+                    best, best_d = txt, d
+            if best:
+                out.append({"caption": best[:160], "energy": float(o.get("energy", 1.0)), "x": int(o["x"]),
+                            "z": float(o.get("z", 0.0))})
+        return out
 
     def ingest_text_event(self, app: str, app_category: str, text: str, title: str = "", url: str = "",
                           doc_path: str = "", window_id: Optional[str] = None, ts: Optional[float] = None,
