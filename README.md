@@ -306,14 +306,14 @@ Source layout:
 
 pHash bits are $D_k > \mathrm{median}(D_{1..63})$. Only confident bits count: $|D_k - \mathrm{med}| \ge 0.25\,\overline{|D-\mathrm{med}|}$, and $d(a,b) = \mathrm{popcount}((h_a\oplus h_b)\wedge m_a\wedge m_b)$. A frame is dropped iff the AX hash is unchanged, $d_{\text{global}}\le4$, $d_{\text{dHash}}\le6$, $\max_q d_q\le2$, **and** the excursion delta is under 5 rows.
 
-The excursion fingerprint is $E_{b,c}=\#\{y\in\text{band }b : |G_2[y,c+1]-G_2[y,c]|>24\}$. It covers 7 overlapping 16-row bands (stride 8) × 63 columns and is stored as `uint8`; it is a count per column, not an image. The delta is $\max_{b,c}|E_{b,c}-E'_{b,c}|$. It adds about 0.018 ms of CPU per check.
+The excursion fingerprint is $E_{b,c}=\mathrm{card}\,\lbrace y\in\text{band }b : \lvert G_2[y,c+1]-G_2[y,c]\rvert>24\rbrace$. It covers 7 overlapping 16-row bands (stride 8) × 63 columns and is stored as `uint8`; it is a count per column, not an image. The delta is $\max_{b,c}\lvert E_{b,c}-E'_{b,c}\rvert$. It adds about 0.018 ms of CPU per check.
 
 **Spectral-HOG-JL descriptor** (per patch $p$ of a 4×4 grid, any RGB/RGBA input):
 - **Spectral:** opponent channels $Y=0.299R+0.587G+0.114B$, $O_1=R-G$, $O_2=B-\tfrac{R+G}{2}$, area-averaged to 16×16. Orthonormal DCT-II $C\,B\,C^\top$, keeping zig-zag $u+v<6$ for $Y$ (21 coefficients) and $u+v<3$ per chroma channel (6 + 6), with signed-sqrt compression.
 - **Gradients:** Scharr at 32×32, an 8-bin unsigned orientation histogram (magnitude-weighted, Hellinger-normalized), edge density and mean magnitude.
 - **Colour:** basic colour-term fractions (11).
 
-Each group is L2-normalized and concatenated into $f_p\in\mathbb{R}^{54}$. It is projected by a seeded Achlioptas matrix $R_{ij}\in\{\pm1/\sqrt d\}$, which satisfies the Johnson-Lindenstrauss lemma, and then made **orthogonal to the colour-word subspace**: $\tilde R = R - R\,Q_cQ_c^\top$, with $Q_c$ = QR of the colour-concept basis. Texture energy therefore never registers as a colour match. A unit test checks $|\,\tilde R^\top f\cdot B[\text{colour}]\,|<10^{-4}$.
+Each group is L2-normalized and concatenated into $f_p\in\mathbb{R}^{54}$. It is projected by a seeded Achlioptas matrix $R_{ij}\in\lbrace\pm1/\sqrt d\rbrace$, which satisfies the Johnson-Lindenstrauss lemma, and then made **orthogonal to the colour-word subspace**: $\tilde R = R - R\,Q_cQ_c^\top$, with $Q_c$ = QR of the colour-concept basis. Texture energy therefore never registers as a colour match. A unit test checks $|\,\tilde R^\top f\cdot B[\text{colour}]\,|<10^{-4}$.
 
 **Morphological concept bank** (`embeddings/morphology.py`). Connected components of the salient-colour mask (channel spread ≥ 12 % of full scale) are measured with thresholds that are fractions of the window or object size:
 
