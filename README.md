@@ -11,7 +11,7 @@ screengraph-os watches your windows the way a debugger watches memory. It splits
 > *"Why did I change `db_pool.py`?"*
 > → `pytest` raised `SQLiteBusyException` in the terminal → you copied it → searched it → opened the SQLite `busy_timeout` docs → edited `db_pool.py`.
 
-screengraph-os ships as a library, a Typer CLI, a Rich TUI and an **MCP server** for any MCP client (Cursor, Gemini CLI, …). It is built on `numpy` + `scipy` + SQLite (WAL, FTS5, binary vector blobs) only: no LangChain/LlamaIndex, no vector DB server, no GPU. Live capture on macOS uses CoreGraphics through `ctypes`, with no pyobjc and no compiled extensions.
+screengraph-os ships as a library, a Typer CLI, a Rich TUI and an **MCP server** for Claude Code, Cursor and Gemini CLI. It is built on `numpy` + `scipy` + SQLite (WAL, FTS5, binary vector blobs) only: no LangChain/LlamaIndex, no vector DB server, no GPU. Live capture on macOS uses CoreGraphics through `ctypes`, with no pyobjc and no compiled extensions.
 
 ```
 $ screengraph why db_pool.py
@@ -241,7 +241,11 @@ screengraph capture --git-repo ~/src/myproject                # long-running: wi
 
 ---
 
-## MCP server
+## MCP: Claude Code, Cursor, Gemini CLI
+
+```bash
+claude mcp add screengraph -- /abs/path/to/.venv/bin/screengraph mcp
+```
 
 ```json
 { "mcpServers": { "screengraph": {
@@ -249,7 +253,7 @@ screengraph capture --git-repo ~/src/myproject                # long-running: wi
     "env": { "SCREENGRAPH_HOME": "/Users/you/.screengraph" } } } }
 ```
 
-The JSON block goes in your MCP client's server config, e.g. `~/.cursor/mcp.json` (Cursor) or `~/.gemini/settings.json` (Gemini CLI). The server speaks JSON-RPC 2.0 over stdio (protocol `2025-06-18`, `2025-03-26`, `2024-11-05`) and exposes these tools:
+The JSON block goes in `~/.cursor/mcp.json` (Cursor) or `~/.gemini/settings.json` (Gemini CLI). The server speaks JSON-RPC 2.0 over stdio (protocol `2025-06-18`, `2025-03-26`, `2024-11-05`) and exposes these tools:
 - `screengraph_active_workspace`
 - `screengraph_causal_why`
 - `screengraph_visual_search`
