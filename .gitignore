@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# environments
+.venv/
+venv/
+.env
+.env.*
+
+# screengraph data (never commit a desktop memory)
+.screengraph/
+*.db
+*.db-wal
+*.db-shm
+.hmac_key
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
