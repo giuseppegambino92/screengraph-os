@@ -1,5 +1,9 @@
 # screengraph-os
 
+**English** · [Italiano](README.it.md)
+
+<a href="https://paypal.me/giuseppegambino92"><img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal"></a>
+
 **Your desktop's memory as a causal graph, not a video. Zero screenshots on disk.**
 
 ![ScreenGraph-OS Terminal Demo](assets/demo.svg)
@@ -432,3 +436,9 @@ Sources:
 ## License
 
 [MIT](LICENSE)
+
+## Support the project
+
+If this project is useful to you, you can support its development with a donation on PayPal:
+
+<a href="https://paypal.me/giuseppegambino92"><img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal"></a>
