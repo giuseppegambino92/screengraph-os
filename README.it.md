@@ -6,9 +6,9 @@
 
 **La memoria del tuo desktop come grafo causale, non come video. Zero screenshot su disco.**
 
-![Demo da terminale di ScreenGraph-OS](assets/demo.svg)
+![Demo da terminale di ScreenGraph-OS](docs/images/it/demo.svg)
 
-<sub>Output reale del motore sul simulatore deterministico (seed 7). I dati di storage nel footer provengono da <code>evals/latest_report.json</code>; il valore "legacy" è un modello parametrico di un video a 0.5 fps, non un prodotto misurato. Per rigenerarlo: <code>python scripts/generate_demo_asset.py</code>.</sub>
+<sub>Output reale del motore sul simulatore deterministico (seed 7). I dati di storage nel footer provengono da <code>evals/latest_report.json</code>; il valore "legacy" è un modello parametrico di un video a 0.5 fps, non un prodotto misurato. Per rigenerarlo: <code>python scripts/generate_demo_asset.py</code> (tutti gli screenshot, in inglese e in italiano).</sub>
 
 screengraph-os osserva le tue finestre come un debugger osserva la memoria. Suddivide il desktop in viewport per singola finestra e scarta i frame inattivi in circa 0.1 ms (p50) con un gate percettivo basato su DCT 2D. Ogni frame viene ridotto a patch embedding int8 + 1-bit e a testo di accessibilità ripulito, poi il buffer dei pixel viene azzerato con `memset(0)` prima che qualsiasi dato tocchi il disco. Ogni cambiamento semantico diventa un nodo in un **grafo causale cross-app basato su processi di Hawkes**. Questo ti permette di chiedere:
 
@@ -34,6 +34,24 @@ why db_pool.py?  (0.6 ms)
 > - **L'encoder visivo di default non richiede addestramento.** I descrittori spettrali DCT, HOG e di colore forniscono una firma generica delle patch (usata per la query-by-example). Le parole raggiungono i pixel attraverso due livelli progettati a mano e relativi alle dimensioni: i **termini di colore** di base e un **concept bank morfologico**. Il bank associa sette primitive d'immagine (curva sottile, escursione verticale, barre allineate, topologia nodo-arco, pillola con etichetta, overlay flottante, periodicità delle righe) a parole fisse ("spike", "tree", "badge", ...). Non contiene coordinate né colori del simulatore, ma è stato **progettato sapendo quali sei tipi di artefatto disegna il simulatore**, quindi il 6/6 sul simulatore è in-distribution. La prova che generalizza è il [test con renderer held-out](#3b-generalizzazione-held-out-del-concept-bank-morfologico): recall del 79–99 % per concetto su un seed di test nuovo, con i punti deboli documentati in quella sezione.
 > - **La cattura live su macOS è stata verificata su un solo Mac** (permesso Registrazione schermo concesso, Accessibilità non concessa). La *qualità* del retrieval su desktop reali non è stata misurata: non esiste ancora un dataset reale etichettato.
 > - **Il valore di storage "legacy" è un modello parametrico**, non la misura di un prodotto.
+
+---
+
+## Screenshot
+
+Tutte le immagini sono output reale di `screengraph` sul simulatore deterministico (seed 7), registrato con Rich e rigenerato da `python scripts/generate_demo_asset.py` (in inglese e in italiano, senza rete e senza cattura dello schermo). I comandi stampano in italiano con `--lang it` oppure con `SCREENGRAPH_LANG=it`; la versione inglese è nel [README in inglese](README.md#screenshots).
+
+**`screengraph --lang it why db_pool.py`**: root cause, catena causale con le evidenze di ogni arco e il grafo Mermaid.
+
+![screengraph --lang it why db_pool.py](docs/images/it/why.svg)
+
+**`screengraph --lang it search "jwt expired" -k 4`**: ricerca ibrida a 4 vie; la colonna `canali` mostra il rank di ogni risultato in ciascun retriever.
+
+![screengraph --lang it search "jwt expired"](docs/images/it/search.svg)
+
+**`screengraph --lang it status`**: la TUI Rich con la mappa di monitor e viewport, l'occupazione su disco, le catene causali in tempo reale e i contatori della privacy.
+
+![screengraph --lang it status](docs/images/it/status.svg)
 
 ---
 
@@ -228,8 +246,11 @@ screengraph active-workspace                 # zero-screenshot semantic state of
 screengraph privacy-audit                    # zero-pixel proof + redaction counters
 screengraph status                           # Rich TUI (live: screengraph dash --simulate)
 screengraph eval [--live 5]                  # benchmark -> evals/latest_report.json
+screengraph --lang it why db_pool.py         # output in italiano (oppure: export SCREENGRAPH_LANG=it)
 pytest                                       # 92 tests (1 opt-in live test: SCREENGRAPH_LIVE_TEST=1)
 ```
+
+**Lingua.** L'output leggibile (messaggi, tabelle, etichette, la TUI e `--help`) è disponibile in inglese (default) e in italiano: usa l'opzione globale `--lang en|it` prima del comando, oppure imposta `SCREENGRAPH_LANG=it`. `--lang` ha la precedenza sulla variabile d'ambiente. L'output JSON (`--json`, `workspace`, `audit`, `ingest`), le risposte MCP, i nomi delle relazioni, le chiavi delle evidenze e i dati catturati dalle finestre non vengono mai tradotti, così script e agenti ricevono lo stesso output in ogni lingua. Le parti generate da Typer/Click (`Usage:`, `Options`, `[default: …]`, la descrizione dell'opzione `--help` stessa, la formulazione degli errori di utilizzo di Click) restano in inglese.
 
 **Desktop reale (macOS).** Serve il permesso Registrazione schermo per il tuo terminale. L'Accessibilità è opzionale: aggiunge il testo AX, e puoi far comparire la richiesta di autorizzazione con `--request-ax`.
 
