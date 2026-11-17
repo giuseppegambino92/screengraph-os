@@ -2,9 +2,29 @@
 
 [English](README.md) · **Italiano**
 
-<a href="https://paypal.me/giuseppegambino92"><img src="https://www.paypalobjects.com/it_IT/IT/i/btn/btn_donateCC_LG.gif" alt="Fai una donazione con PayPal"></a>
+**Chiedi al tuo computer *perché* hai fatto qualcosa e ottieni la catena di finestre che ti ha portato lì. Senza salvare screenshot.**
 
-**La memoria del tuo desktop come grafo causale, non come video. Zero screenshot su disco.**
+[![Licenza: MIT](https://img.shields.io/badge/licenza-MIT-blue)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+
+screengraph-os tiene una memoria locale e consultabile di ciò che succede nelle finestre del tuo desktop (terminale, browser, editor, chat). Di ogni cambiamento conserva solo piccole impronte numeriche e il testo ripulito, mai le immagini, e collega gli eventi tra un'app e l'altra: "perché ho modificato `db_pool.py`?" → il test fallito, l'errore copiato, la ricerca sul web e la pagina di documentazione che hanno portato alla modifica.
+
+È pensato per gli sviluppatori che vogliono cercare e ripercorrere la propria cronologia di lavoro dal terminale, oppure metterla a disposizione di un assistente AI (Claude Code, Cursor, Gemini CLI) tramite MCP. Tutto resta sul tuo computer, in un file SQLite. È un progetto giovane: la cattura live è stata verificata solo su macOS e i dati di accuratezza riportati più sotto provengono da un simulatore incluso nel repository.
+
+## Provalo in 30 secondi
+
+Non servono permessi sullo schermo: viene riprodotta una sessione di lavoro simulata di 60 minuti inclusa nel repository.
+
+```bash
+git clone https://github.com/giuseppegambino92/screengraph-os.git && cd screengraph-os
+python3.11 -m venv .venv && . .venv/bin/activate     # va bene qualsiasi Python 3.10+
+pip install -e ".[dev]"
+
+screengraph simulate              # riproduce la sessione simulata
+screengraph why db_pool.py        # root cause + catena di eventi che ha portato alla modifica
+```
+
+Altri comandi, cattura del desktop reale e configurazione MCP: vedi [Avvio rapido](#avvio-rapido).
 
 ![Demo da terminale di ScreenGraph-OS](docs/images/it/demo.svg)
 
@@ -231,11 +251,9 @@ Il run live ha individuato e corretto due bug reali che il simulatore non aveva 
 
 ## Avvio rapido
 
-```bash
-git clone <this repo> && cd screengraph-os
-python3.11 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+Installa come in [Provalo in 30 secondi](#provalo-in-30-secondi), poi:
 
+```bash
 screengraph simulate                         # replay the deterministic 60-min, 2-monitor session
 screengraph why db_pool.py                   # root cause + chain + Mermaid graph
 screengraph visual "orange warning modal"    # colour + on-screen-text visual search with patch localization

@@ -2,9 +2,29 @@
 
 **English** · [Italiano](README.it.md)
 
-<a href="https://paypal.me/giuseppegambino92"><img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal"></a>
+**Ask your computer *why* you did something, and get the chain of windows that led there. No screenshots saved.**
 
-**Your desktop's memory as a causal graph, not a video. Zero screenshots on disk.**
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+
+screengraph-os keeps a local, searchable memory of what happens in the windows on your desktop (terminal, browser, editor, chat). It stores only small numeric fingerprints and cleaned-up text of each change, never the images, and links events across apps: "why did I change `db_pool.py`?" → the failing test, the copied error, the web search and the docs page that led to the edit.
+
+It is for developers who want to search and replay their own work history from the terminal, or give it to an AI assistant (Claude Code, Cursor, Gemini CLI) over MCP. Everything stays on your machine in a SQLite file. It is an early project: live capture has been verified on macOS only, and the accuracy numbers below come from a built-in simulator.
+
+## Try it in 30 seconds
+
+No screen permissions needed: this replays a built-in simulated 60-minute work session.
+
+```bash
+git clone https://github.com/giuseppegambino92/screengraph-os.git && cd screengraph-os
+python3.11 -m venv .venv && . .venv/bin/activate     # any Python 3.10+
+pip install -e ".[dev]"
+
+screengraph simulate              # replay the simulated session
+screengraph why db_pool.py        # root cause + chain of events that led to the edit
+```
+
+More commands, real-desktop capture and MCP setup: see [Quickstart](#quickstart).
 
 ![ScreenGraph-OS Terminal Demo](docs/images/en/demo.svg)
 
@@ -231,11 +251,9 @@ The live run found and fixed two real bugs the simulator never exercised. Window
 
 ## Quickstart
 
-```bash
-git clone <this repo> && cd screengraph-os
-python3.11 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+Install as in [Try it in 30 seconds](#try-it-in-30-seconds), then:
 
+```bash
 screengraph simulate                         # replay the deterministic 60-min, 2-monitor session
 screengraph why db_pool.py                   # root cause + chain + Mermaid graph
 screengraph visual "orange warning modal"    # colour + on-screen-text visual search with patch localization
