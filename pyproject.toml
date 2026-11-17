@@ -9,6 +9,20 @@ description = "Zero-screenshot spatio-temporal desktop memory and cross-app caus
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Giuseppe Gambino" }]
+keywords = ["mcp", "desktop-memory", "causal-graph", "hawkes-process", "privacy", "local-first"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 dependencies = [
   "numpy>=1.26",
   "scipy>=1.11",
@@ -21,6 +35,11 @@ dependencies = [
 dev = ["pytest>=8"]
 macos = ["pyobjc-framework-Quartz>=10", "pyobjc-framework-ApplicationServices>=10"]  # optional; live capture uses ctypes
 clip = ["open_clip_torch>=2.24", "torch>=2.2", "pillow>=10"]  # optional learned VisionAdapter
+
+[project.urls]
+Homepage = "https://github.com/giuseppegambino92/screengraph-os"
+Repository = "https://github.com/giuseppegambino92/screengraph-os"
+Issues = "https://github.com/giuseppegambino92/screengraph-os/issues"
 
 [project.scripts]
 screengraph = "screengraph.interfaces.cli:main"
